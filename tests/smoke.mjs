@@ -15,7 +15,7 @@ globalThis.URLSearchParams = class URLSearchParams {
   }
 };
 
-const { CONFIG, isApiConfigured } = await import("../site/js/config.js");
+const { CONFIG, isApiConfigured, isGoogleAuthConfigured } = await import("../site/js/config.js");
 const { parseHashRoute } = await import("../site/js/router.js");
 const { calculateStatistics, sortTickets, statusLabel } = await import("../site/js/utils.js");
 
@@ -23,10 +23,10 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const participantRoute = parseHashRoute("#/session/session-demo?member=member-demo");
+const participantRoute = parseHashRoute("#/session/session-demo");
 assert(participantRoute.name === "session", "Participant route is not recognized.");
 assert(participantRoute.params.sessionId === "session-demo", "Session parameter is incorrect.");
-assert(participantRoute.query.get("member") === "member-demo", "Hash query parameter is incorrect.");
+assert(participantRoute.query.get("member") === null, "Participant identity must not be present in the URL.");
 
 const createRoute = parseHashRoute("#/sessions/new");
 assert(createRoute.name === "create-session", "New-session route is not recognized.");
@@ -51,5 +51,11 @@ const expectedConfiguredState = Boolean(
     && /^https:\/\//i.test(CONFIG.apiUrl),
 );
 assert(isApiConfigured() === expectedConfiguredState, "API configuration status is incorrect.");
+const expectedGoogleAuthState = Boolean(
+  CONFIG.googleClientId
+    && !CONFIG.googleClientId.includes("PASTE_HERE")
+    && CONFIG.googleClientId.endsWith(".apps.googleusercontent.com"),
+);
+assert(isGoogleAuthConfigured() === expectedGoogleAuthState, "Google authentication configuration status is incorrect.");
 
 print("Smoke tests passed");

@@ -1,5 +1,6 @@
 export const CONFIG = {
   apiUrl: "https://script.google.com/macros/s/AKfycbyTJTFiuct48J2vCf5tVCkx5J7MmXcUYOgzpcQoiVW4M1CX9Pc8y7Y2Xg2OHls2Pikr/exec",
+  googleClientId: "PASTE_HERE_THE_GOOGLE_OAUTH_CLIENT_ID",
   pollingIntervalMs: 3000,
   hiddenPollingIntervalMs: 15000,
   requestTimeoutMs: 15000,
@@ -10,5 +11,13 @@ export function isApiConfigured() {
     CONFIG.apiUrl
       && !CONFIG.apiUrl.includes("PASTE_HERE")
       && /^https:\/\//i.test(CONFIG.apiUrl),
+  );
+}
+
+export function isGoogleAuthConfigured() {
+  return Boolean(
+    CONFIG.googleClientId
+      && !CONFIG.googleClientId.includes("PASTE_HERE")
+      && CONFIG.googleClientId.endsWith(".apps.googleusercontent.com"),
   );
 }

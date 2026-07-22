@@ -1,4 +1,5 @@
 import { getHealth, list } from "../api.js";
+import { getCurrentUser } from "../authSession.js";
 import { isApiConfigured } from "../config.js";
 import { state, setState } from "../state.js";
 import { getStoredValue, setStoredValue, STORAGE_KEYS } from "../storage.js";
@@ -23,19 +24,21 @@ function renderSessionCard(session) {
   if (session.ticketCount !== undefined && session.ticketCount !== null) {
     metadata.append(el("span", { text: `${session.ticketCount} ticket${Number(session.ticketCount) === 1 ? "" : "s"}` }));
   }
+  const actions = [el("a", { className: "button button--primary", href: `#/session/${encodeURIComponent(session.id)}`, text: "Join" })];
+  if (session.canFacilitate) {
+    actions.push(el("a", { className: "button button--secondary", href: `#/facilitate/${encodeURIComponent(session.id)}`, text: "Facilitate" }));
+  }
   return el("article", { className: "session-card" }, [
     el("div", {}, [
       el("h3", { text: session.name || "Untitled session" }),
       metadata,
     ]),
-    el("div", { className: "button-row session-card__actions" }, [
-      el("a", { className: "button button--primary", href: `#/session/${encodeURIComponent(session.id)}`, text: "Join" }),
-      el("a", { className: "button button--secondary", href: `#/facilitate/${encodeURIComponent(session.id)}`, text: "Facilitate" }),
-    ]),
+    el("div", { className: "button-row session-card__actions" }, actions),
   ]);
 }
 
 function renderHome(app) {
+  const canCreate = Boolean(getCurrentUser()?.memberships?.some((membership) => membership.role === "facilitator"));
   const selectedTeam = state.teams.find((team) => String(team.id) === String(state.selectedTeamId));
   const header = el("div", { className: "hero" }, [
     el("div", {}, [
@@ -87,7 +90,7 @@ function renderHome(app) {
     el("div", { className: "team-picker" }, [
       el("label", { htmlFor: "team-select", text: "Team" }),
       teamSelect,
-      el("a", { className: "button button--primary", href: "#/sessions/new", text: "New session" }),
+      canCreate ? el("a", { className: "button button--primary", href: "#/sessions/new", text: "New session" }) : null,
     ]),
   ]));
 
@@ -95,7 +98,7 @@ function renderHome(app) {
     content.append(el("div", { className: "empty-state empty-state--compact" }, [
       el("h3", { text: "No sessions for this team" }),
       el("p", { text: "Create the first session to estimate tickets." }),
-      el("a", { className: "button button--primary", href: "#/sessions/new", text: "New session" }),
+      canCreate ? el("a", { className: "button button--primary", href: "#/sessions/new", text: "New session" }) : null,
     ]));
   } else {
     content.append(el("div", { className: "session-list" }, sortSessions(state.sessions).map(renderSessionCard)));

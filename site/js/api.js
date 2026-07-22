@@ -1,4 +1,5 @@
 import { CONFIG, isApiConfigured } from "./config.js";
+import { clearAuthSession, getAuthToken } from "./authSession.js";
 
 export class ApiError extends Error {
   constructor(message, code = "UNKNOWN_ERROR", status = 0, details = null) {
@@ -61,12 +62,16 @@ async function parseResponse(response) {
     throw new ApiError("The server response has an unexpected format.", "INVALID_RESPONSE", response.status);
   }
   if (payload.ok === false) {
-    throw new ApiError(
+    const error = new ApiError(
       payload.error?.message || payload.message || "The server rejected the operation.",
       payload.error?.code || payload.code || "API_ERROR",
-      response.status,
+      payload.error?.status || response.status,
       payload.error?.details || payload.details || null,
     );
+    if (error.status === 401 || ["AUTH_REQUIRED", "INVALID_SESSION", "SESSION_EXPIRED"].includes(error.code)) {
+      clearAuthSession();
+    }
+    throw error;
   }
   if (payload.ok !== true || !("data" in payload)) {
     throw new ApiError("The server response is missing required fields.", "INVALID_RESPONSE", response.status, payload);
@@ -74,7 +79,7 @@ async function parseResponse(response) {
   return payload.data;
 }
 
-async function request({ method = "GET", params = {}, payload = null }) {
+async function request({ method = "POST", params = {}, payload = null, authenticated = true }) {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), CONFIG.requestTimeoutMs);
 
@@ -84,8 +89,14 @@ async function request({ method = "GET", params = {}, payload = null }) {
     if (method === "GET") {
       url = createUrl(params);
     } else {
+      const body = { ...(payload || {}) };
+      if (authenticated) {
+        const authToken = getAuthToken();
+        if (!authToken) throw new ApiError("Sign in to continue.", "AUTH_REQUIRED", 401);
+        body.authToken = authToken;
+      }
       options.headers = { "Content-Type": "text/plain;charset=utf-8" };
-      options.body = JSON.stringify(payload);
+      options.body = JSON.stringify(body);
     }
     const response = await fetch(url, options);
     return await parseResponse(response);
@@ -105,15 +116,26 @@ async function request({ method = "GET", params = {}, payload = null }) {
 }
 
 export function getHealth() {
-  return request({ params: { action: "health" } });
+  return request({ method: "GET", params: { action: "health" }, authenticated: false });
+}
+
+export function exchangeGoogleCode(code, redirectOrigin) {
+  return request({
+    payload: { action: "authenticate", code, redirectOrigin },
+    authenticated: false,
+  });
+}
+
+export function getMe() {
+  return request({ payload: { action: "me" } });
 }
 
 export function list(entity, filters = {}) {
-  return request({ params: { action: "list", entity, ...filters } });
+  return request({ payload: { action: "list", entity, filters } });
 }
 
 export function get(entity, id) {
-  return request({ params: { action: "get", entity, id } });
+  return request({ payload: { action: "get", entity, id } });
 }
 
 export function create(entity, data) {
@@ -129,7 +151,7 @@ export function remove(entity, id) {
 }
 
 export function getSessionState(sessionId) {
-  return request({ params: { action: "sessionState", sessionId } });
+  return request({ payload: { action: "sessionState", sessionId } });
 }
 
 export function submitVote(payload) {

@@ -191,6 +191,67 @@ h3 {
   border-bottom-color: #8fc8bd;
 }
 
+.account-control {
+  display: flex;
+  margin-left: auto;
+  color: #dce8f2;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+}
+
+.account-control__identity {
+  display: grid;
+  line-height: 1.25;
+}
+
+.account-control__identity strong {
+  color: #fff;
+}
+
+.account-control__signout {
+  padding: 0.4rem 0.65rem;
+  color: #fff;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 0.45rem;
+  cursor: pointer;
+}
+
+.account-control__signout:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.signin-card {
+  width: min(100%, 560px);
+  margin: clamp(2rem, 8vh, 6rem) auto;
+  text-align: center;
+}
+
+.signin-card .lead {
+  margin-inline: auto;
+}
+
+.google-signin {
+  min-width: 220px;
+}
+
+.readonly-value {
+  margin: 0;
+  padding: 0.72rem 0.8rem;
+  background: var(--background);
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  font-weight: 700;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--navy-950);
+  font-weight: 700;
+}
+
 .config-banner {
   padding: 0.8rem max(1rem, calc((100% - 1200px) / 2));
   color: #604006;
@@ -1183,6 +1244,10 @@ a.ticket-key:hover {
     display: none;
   }
 
+  .account-control__identity {
+    display: none;
+  }
+
   .hero,
   .page-heading,
   .section-heading,
@@ -1273,6 +1338,10 @@ a.ticket-key:hover {
 @media (max-width: 390px) {
   .brand__mark {
     width: 30px;
+  }
+
+  .brand span {
+    display: none;
   }
 
   .vote-cards {

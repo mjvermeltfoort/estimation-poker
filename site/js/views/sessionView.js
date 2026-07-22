@@ -1,8 +1,7 @@
 import { getSessionState, submitVote } from "../api.js";
 import { isApiConfigured } from "../config.js";
 import { showToast } from "../notifications.js";
-import { navigateTo } from "../router.js";
-import { getStoredValue, removeStoredValue, roundStorageKey, setStoredValue, STORAGE_KEYS } from "../storage.js";
+import { getStoredValue, roundStorageKey, setStoredValue, STORAGE_KEYS } from "../storage.js";
 import {
   VOTE_VALUES, calculateStatistics, el, errorMessage, formatHours, normalizeList,
   safeJiraUrl, sortTickets, statusBadge,
@@ -27,34 +26,6 @@ function currentTicketFor(model) {
   return model.currentTicket
     || model.tickets.find((ticket) => String(ticket.id) === String(model.session.currentTicketId))
     || null;
-}
-
-function renderMemberChooser(app, model, sessionId) {
-  const activeMembers = model.members.filter(isActiveMember);
-  const grid = el("div", { className: "member-grid" });
-  activeMembers.forEach((member) => {
-    const button = el("button", { className: "member-card", type: "button" }, [
-      el("span", { className: "avatar", text: String(member.displayName || "?").slice(0, 1).toUpperCase() }),
-      el("strong", { text: member.displayName || member.id }),
-      el("span", { className: "muted", text: member.role || "member" }),
-    ]);
-    button.addEventListener("click", () => {
-      setStoredValue(STORAGE_KEYS.selectedMemberId, member.id);
-      setStoredValue(STORAGE_KEYS.lastSessionId, sessionId);
-      navigateTo(`/session/${encodeURIComponent(sessionId)}?member=${encodeURIComponent(member.id)}`);
-    });
-    grid.append(button);
-  });
-
-  app.replaceChildren(el("section", { className: "member-choice" }, [
-    el("p", { className: "eyebrow", text: "Join" }),
-    el("h1", { text: model.session.name || "Estimation session" }),
-    el("p", { className: "lead", text: "Who are you? This selection is only for identification and does not provide authentication." }),
-    activeMembers.length
-      ? grid
-      : el("div", { className: "empty-state empty-state--compact" }, [el("h2", { text: "No active team members" }), el("p", { text: "Ask the facilitator to check the team configuration." })]),
-    el("a", { className: "button button--ghost", href: "#/", text: "Back to home" }),
-  ]));
 }
 
 function renderParticipantStatus(model, currentVotes, revealed) {
@@ -89,7 +60,7 @@ function renderStatistics(votes, suppliedStatistics, finalEstimateHours) {
   return grid;
 }
 
-function renderSession(app, model, selectedMember, roundNumber, context) {
+function renderSession(app, model, viewer, roundNumber, context) {
   const { sessionId, refresh } = context;
   const ticket = currentTicketFor(model);
   const tickets = sortTickets(model.tickets);
@@ -99,25 +70,15 @@ function renderSession(app, model, selectedMember, roundNumber, context) {
     : [];
   const revealed = ticket && ["revealed", "estimated"].includes(ticket.status);
   const canVote = ticket && ["pending", "voting"].includes(ticket.status) && model.session.status !== "completed";
-  const ownVote = currentVotes.find((vote) => String(vote.teamMemberId) === String(selectedMember.id));
+  const ownVote = currentVotes.find((vote) => String(vote.teamMemberId) === String(viewer.memberId));
 
   const heading = el("div", { className: "page-heading" }, [
     el("div", {}, [
-      el("p", { className: "eyebrow", text: `Participant · ${selectedMember.displayName || selectedMember.id}` }),
+      el("p", { className: "eyebrow", text: `Participant · ${viewer.displayName || viewer.memberId}` }),
       el("h1", { text: model.session.name || "Estimation session" }),
       el("div", { className: "meta-row" }, [statusBadge(model.session.status), el("span", { text: ticketIndex >= 0 ? `${ticketIndex + 1} of ${tickets.length}` : `${tickets.length} tickets` })]),
     ]),
-    el("div", { className: "button-row" }, [
-      el("a", { className: "button button--ghost", href: "#/", text: "Home" }),
-      (() => {
-        const change = el("button", { className: "button button--secondary", type: "button", text: "Change team member" });
-        change.addEventListener("click", () => {
-          removeStoredValue(STORAGE_KEYS.selectedMemberId);
-          navigateTo(`/session/${encodeURIComponent(sessionId)}`);
-        });
-        return change;
-      })(),
-    ]),
+    el("div", { className: "button-row" }, [el("a", { className: "button button--ghost", href: "#/", text: "Home" })]),
   ]);
 
   const ticketPanel = el("section", { className: "panel ticket-focus" });
@@ -184,7 +145,6 @@ function renderSession(app, model, selectedMember, roundNumber, context) {
             await submitVote({
               sessionId,
               ticketId: ticket.id,
-              teamMemberId: selectedMember.id,
               roundNumber,
               estimateHours: value,
             });
@@ -234,17 +194,7 @@ export async function renderSessionView({ app, route, isCurrent = () => true, re
     const model = normalizeSessionState(await getSessionState(sessionId));
     if (!isCurrent()) return;
     if (!model) throw new Error("The session was not found or the response is incomplete.");
-    const activeMembers = model.members.filter(isActiveMember);
-    const requestedId = route.query.get("member");
-    const storedId = getStoredValue(STORAGE_KEYS.selectedMemberId, null);
-    const selectedId = requestedId || storedId;
-    const selectedMember = activeMembers.find((member) => String(member.id) === String(selectedId));
-    if (!selectedMember) {
-      if (storedId) removeStoredValue(STORAGE_KEYS.selectedMemberId);
-      renderMemberChooser(app, model, sessionId);
-      return;
-    }
-    setStoredValue(STORAGE_KEYS.selectedMemberId, selectedMember.id);
+    if (!model.viewer?.memberId) throw new Error("The server did not return the signed-in team membership.");
     setStoredValue(STORAGE_KEYS.lastSessionId, sessionId);
     const ticket = currentTicketFor(model);
     let roundNumber = 1;
@@ -256,7 +206,7 @@ export async function renderSessionView({ app, route, isCurrent = () => true, re
         : Number.isInteger(storedRound) && storedRound > 0 ? storedRound : 1;
       setStoredValue(roundStorageKey(sessionId, ticket.id), roundNumber, "sessionStorage");
     }
-    renderSession(app, model, selectedMember, roundNumber, { sessionId, refresh });
+    renderSession(app, model, model.viewer, roundNumber, { sessionId, refresh });
   } catch (error) {
     if (!isCurrent()) return;
     if (app.querySelector(".session-layout")) {

@@ -1,7 +1,5 @@
 export const STORAGE_KEYS = {
   selectedTeamId: "estimationPoker.selectedTeamId",
-  selectedMemberId: "estimationPoker.selectedMemberId",
-  facilitatorMemberId: "estimationPoker.facilitatorMemberId",
   lastSessionId: "estimationPoker.lastSessionId",
 };
 

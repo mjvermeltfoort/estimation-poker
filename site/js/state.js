@@ -5,8 +5,6 @@ export const state = {
   selectedTeamId: null,
   sessions: [],
   sessionState: null,
-  selectedMemberId: null,
-  facilitatorMemberId: null,
   currentRoundNumber: 1,
   initialLoading: false,
   refreshing: false,
@@ -22,8 +20,6 @@ export function setState(patch) {
 export function resetSessionState() {
   setState({
     sessionState: null,
-    selectedMemberId: null,
-    facilitatorMemberId: null,
     currentRoundNumber: 1,
     refreshing: false,
     mutating: false,

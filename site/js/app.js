@@ -1,4 +1,6 @@
-import { isApiConfigured } from "./config.js";
+import { isApiConfigured, isGoogleAuthConfigured } from "./config.js";
+import { getCurrentUser } from "./authSession.js";
+import { renderAccountControl, renderSignInView, restoreAuthenticatedUser } from "./auth.js";
 import { clearFatalError, initNotifications } from "./notifications.js";
 import { startPolling, stopPolling } from "./polling.js";
 import { startRouter } from "./router.js";
@@ -11,11 +13,14 @@ import { renderSessionView } from "./views/sessionView.js";
 
 const app = document.querySelector("#app");
 const configBanner = document.querySelector("#config-banner");
+const accountRegion = document.querySelector("#account-region");
 let routeGeneration = 0;
 let activeRoute = null;
 
 function updateNavigation(route) {
+  const canCreate = Boolean(getCurrentUser()?.memberships?.some((membership) => membership.role === "facilitator"));
   document.querySelectorAll("[data-nav]").forEach((link) => {
+    if (link.dataset.nav === "create") link.hidden = !canCreate;
     const active = link.dataset.nav === (route.name === "home" ? "home" : route.name === "create-session" ? "create" : "session");
     if (active) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
@@ -23,7 +28,7 @@ function updateNavigation(route) {
 }
 
 function updateConfigBanner() {
-  if (isApiConfigured()) {
+  if (isApiConfigured() && isGoogleAuthConfigured()) {
     configBanner.hidden = true;
     configBanner.replaceChildren();
     return;
@@ -32,7 +37,9 @@ function updateConfigBanner() {
   const strong = document.createElement("strong");
   strong.textContent = "API configuration is missing. ";
   const text = document.createElement("span");
-  text.textContent = "Set the Google Apps Script /exec URL as apiUrl in site/js/config.js. No network requests will be made until then.";
+  text.textContent = !isApiConfigured()
+    ? "Set the Google Apps Script /exec URL as apiUrl in site/js/config.js. No network requests will be made until then."
+    : "Set the Google OAuth web client ID as googleClientId in site/js/config.js.";
   configBanner.replaceChildren(strong, text);
 }
 
@@ -71,6 +78,11 @@ async function handleRoute(route) {
   app.replaceChildren();
   updateNavigation(route);
   window.scrollTo({ top: 0, behavior: "auto" });
+  renderAccountControl(accountRegion);
+  if (isApiConfigured() && !getCurrentUser()) {
+    renderSignInView(app);
+    return;
+  }
   await routeToView(route, generation);
   if (generation !== routeGeneration) return;
   if (["session", "facilitate"].includes(route.name) && isApiConfigured()) {
@@ -80,4 +92,10 @@ async function handleRoute(route) {
 
 initNotifications();
 updateConfigBanner();
+window.addEventListener("estimation-poker:auth-changed", () => {
+  renderAccountControl(accountRegion);
+  if (activeRoute) handleRoute(activeRoute);
+});
+
+await restoreAuthenticatedUser();
 startRouter(handleRoute);

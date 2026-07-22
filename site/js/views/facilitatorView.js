@@ -1,8 +1,7 @@
 import { create, finalizeTicket, getSessionState, revealTicket, update } from "../api.js";
 import { isApiConfigured } from "../config.js";
 import { showToast } from "../notifications.js";
-import { navigateTo } from "../router.js";
-import { getStoredValue, removeStoredValue, roundStorageKey, setStoredValue, STORAGE_KEYS } from "../storage.js";
+import { getStoredValue, roundStorageKey, setStoredValue, STORAGE_KEYS } from "../storage.js";
 import {
   VOTE_VALUES, calculateStatistics, el, errorMessage, formatHours, normalizeList,
   safeJiraUrl, setBusy, sortTickets, statusBadge,
@@ -27,37 +26,6 @@ function getCurrentTicket(model) {
   return model.currentTicket
     || model.tickets.find((ticket) => String(ticket.id) === String(model.session.currentTicketId))
     || null;
-}
-
-function chooseFacilitator(app, model, sessionId) {
-  const activeMembers = model.members.filter(isActiveMember);
-  const facilitators = activeMembers.filter((member) => member.role === "facilitator");
-  const choices = facilitators.length ? facilitators : activeMembers;
-  const chooser = el("section", { className: "member-choice" }, [
-    el("p", { className: "eyebrow", text: "Facilitate" }),
-    el("h1", { text: model.session.name || "Estimation session" }),
-    el("p", { className: "lead", text: "Select who will facilitate this session. This is for identification only and does not provide secure authorization." }),
-  ]);
-  if (!facilitators.length && activeMembers.length) {
-    chooser.append(el("p", { className: "inline-warning", text: "No active team member has the facilitator role. For this MVP, any active team member can be selected." }));
-  }
-  const grid = el("div", { className: "member-grid" });
-  choices.forEach((member) => {
-    const button = el("button", { className: "member-card", type: "button" }, [
-      el("span", { className: "avatar", text: String(member.displayName || "?").slice(0, 1).toUpperCase() }),
-      el("strong", { text: member.displayName || member.id }),
-      el("span", { className: "muted", text: member.role || "member" }),
-    ]);
-    button.addEventListener("click", () => {
-      setStoredValue(STORAGE_KEYS.facilitatorMemberId, member.id);
-      setStoredValue(STORAGE_KEYS.lastSessionId, sessionId);
-      navigateTo(`/facilitate/${encodeURIComponent(sessionId)}`);
-    });
-    grid.append(button);
-  });
-  chooser.append(choices.length ? grid : el("div", { className: "empty-state empty-state--compact" }, [el("h2", { text: "No active team members" }), el("p", { text: "Add an active team member first." })]));
-  chooser.append(el("a", { className: "button button--ghost", href: "#/", text: "Back to home" }));
-  app.replaceChildren(chooser);
 }
 
 function participantList(model, currentVotes, revealed) {
@@ -218,14 +186,7 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
       el("h1", { text: session.name || "Estimation session" }),
       el("div", { className: "meta-row" }, [statusBadge(session.status), el("span", { text: `${model.tickets.length} ticket${model.tickets.length === 1 ? "" : "s"}` }), el("span", { className: "refresh-indicator", id: "refresh-status", "aria-live": "polite" })]),
     ]),
-    el("div", { className: "button-row" }, [
-      el("a", { className: "button button--ghost", href: "#/", text: "Home" }),
-      (() => {
-        const change = el("button", { className: "button button--secondary", type: "button", text: "Change facilitator" });
-        change.addEventListener("click", () => { removeStoredValue(STORAGE_KEYS.facilitatorMemberId); refresh(true); });
-        return change;
-      })(),
-    ]),
+    el("div", { className: "button-row" }, [el("a", { className: "button button--ghost", href: "#/", text: "Home" })]),
   ]);
 
   const sharePanel = el("section", { className: "share-bar" }, [
@@ -396,17 +357,10 @@ export async function renderFacilitatorView({ app, route, isCurrent = () => true
     const model = normalizeSessionState(await getSessionState(sessionId));
     if (!isCurrent()) return;
     if (!model) throw new Error("The session was not found or the response is incomplete.");
-    const activeMembers = model.members.filter(isActiveMember);
-    const roleFacilitators = activeMembers.filter((member) => member.role === "facilitator");
-    const eligibleFacilitators = roleFacilitators.length ? roleFacilitators : activeMembers;
-    const storedId = getStoredValue(STORAGE_KEYS.facilitatorMemberId, null);
-    const facilitator = eligibleFacilitators.find((member) => String(member.id) === String(storedId));
-    if (!facilitator) {
-      if (storedId) removeStoredValue(STORAGE_KEYS.facilitatorMemberId);
-      chooseFacilitator(app, model, sessionId);
-      return;
+    if (!model.viewer?.canFacilitate) {
+      throw new Error("Your Google account does not have facilitator permission for this team.");
     }
-    setStoredValue(STORAGE_KEYS.facilitatorMemberId, facilitator.id);
+    const facilitator = { id: model.viewer.memberId, displayName: model.viewer.displayName };
     setStoredValue(STORAGE_KEYS.lastSessionId, sessionId);
     const currentTicket = getCurrentTicket(model);
     let roundNumber = 1;

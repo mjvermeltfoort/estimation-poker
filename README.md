@@ -8,8 +8,8 @@ The first version supports teams, sessions, manually entered Jira tickets, blind
 
 ```text
 GitHub Pages static frontend
-        ↓
-Google Apps Script Web App
+        ↓ Google OAuth authorization code
+Google Apps Script Web App (authentication + authorization)
         ↓
 Google Sheet
 ```
@@ -29,6 +29,8 @@ The frontend uses HTML5, modern CSS, and vanilla JavaScript ES modules. All brow
 │   ├── css/styles.css
 │   └── js/
 │       ├── app.js                # startup, routes, and polling
+│       ├── auth.js               # Google OAuth code flow and sign-in UI
+│       ├── authSession.js        # tab-scoped signed application session
 │       ├── api.js                # all Fetch API communication
 │       ├── config.js             # Apps Script URL and timeouts
 │       ├── router.js             # hash routing
@@ -47,13 +49,36 @@ The frontend uses HTML5, modern CSS, and vanilla JavaScript ES modules. All brow
 
 ## Configuration
 
-Open [`site/js/config.js`](site/js/config.js) and replace:
+Open [`site/js/config.js`](site/js/config.js) and configure both public values:
 
 ```javascript
-apiUrl: "PASTE_HERE_THE_GOOGLE_APPS_SCRIPT_EXEC_URL"
+apiUrl: "PASTE_HERE_THE_GOOGLE_APPS_SCRIPT_EXEC_URL",
+googleClientId: "PASTE_HERE_THE_GOOGLE_OAUTH_CLIENT_ID"
 ```
 
-with the published Google Apps Script URL ending in `/exec`. The URL is not a secret, but it should be configured in one place only. While the placeholder is present, the app displays a configuration notice and intentionally makes no network requests.
+The Apps Script URL must end in `/exec`. The Google OAuth client ID is public and ends in `.apps.googleusercontent.com`. Never put the OAuth client secret in this file.
+
+## Configure Google authentication
+
+1. Create a **Web application** OAuth client in the Google Cloud project used for this application.
+2. Add the production site origin under **Authorized JavaScript origins**: `https://estimation-poker.markvermeltfoort.nl`. If the custom domain is removed later, use the GitHub Pages origin instead; a project path such as `/estimation-poker` is never part of the origin.
+3. Add `http://localhost:8080` as an authorized JavaScript origin for local testing.
+4. Configure the OAuth consent screen. Only the `openid`, `email`, and `profile` scopes are requested.
+5. Copy the client ID to `googleClientId` in `site/js/config.js`.
+6. In Apps Script, open **Project Settings → Script properties** and add:
+
+   | Property | Value |
+   | --- | --- |
+   | `GOOGLE_CLIENT_ID` | The same web client ID used by the frontend |
+   | `GOOGLE_CLIENT_SECRET` | The web client secret; keep this server-side |
+   | `GOOGLE_ALLOWED_ORIGINS` | `https://estimation-poker.markvermeltfoort.nl,http://localhost:8080` |
+   | `GOOGLE_ALLOWED_DOMAIN` | Optional but recommended Workspace domain, such as `example.com` |
+
+Apps Script creates `ESTIMATION_POKER_SESSION_SECRET` automatically on the first successful sign-in. Treat it as a secret and do not copy it to the frontend.
+
+Authentication is invite-only. Before someone can sign in, create an active row in `TeamMembers` with their exact Google email address, team, display name, and role. On first sign-in the server permanently binds that team-member ID to the stable Google account subject in Script Properties. An email can be present in multiple teams for the same person.
+
+If an invitation was linked to the wrong Google account, run `resetGoogleBindingForMember(memberId)` from an administrator-only Apps Script wrapper, then let the intended user sign in again.
 
 ## Run locally
 
@@ -73,7 +98,7 @@ Then open [http://localhost:8080](http://localhost:8080). Do not use `file://` d
 4. Select `Deploy → New deployment`.
 5. Select `Web app`.
 6. Run the app as the owner.
-7. Choose the required access level for the internal MVP.
+7. Set access to **Anyone** so the cross-origin frontend can reach the endpoint. The application performs its own signed-session validation before every protected action.
 8. Copy the deployment URL ending in `/exec`.
 9. Add that URL to `site/js/config.js`.
 
@@ -86,7 +111,6 @@ A `/dev` URL is only for testing by authorized script editors and is not suitabl
 | `#/` | View teams and sessions |
 | `#/sessions/new` | Create a new draft session |
 | `#/session/{sessionId}` | Join and vote |
-| `#/session/{sessionId}?member={memberId}` | Join with a preselected team member |
 | `#/facilitate/{sessionId}` | Facilitate a session |
 
 ## Enable GitHub Pages
@@ -101,22 +125,27 @@ A `/dev` URL is only for testing by authorized script editors and is not suitabl
 
 The workflow validates the essential files, uploads only `site/`, and deploys to the `github-pages` environment. All assets use relative paths, so a project site works under `username.github.io/repository-name/`.
 
-## Security limitations
+## Security model
 
-- There is no real login yet.
-- Team member and facilitator selection do not provide authentication or authorization.
-- Anyone with the Pages link can access the frontend.
-- An Apps Script Web App configured for public access is publicly reachable.
-- Never put Jira tokens, API keys, or other secrets in the frontend.
-- This version is an internal MVP; do not use it as a secure external product.
-- Do not store sensitive or confidential information in the connected Sheet.
-- Roles are used in the interface but are not securely enforced.
+- Google performs user authentication through the OAuth authorization-code flow.
+- Apps Script exchanges the one-time code directly with Google; the OAuth client secret remains in Script Properties.
+- The application session is short-lived, HMAC-signed, and stored only in the browser tab's `sessionStorage`.
+- Every protected API operation requires a valid session and an active team membership.
+- Participant identity is derived server-side. Member IDs in URLs or request bodies cannot change who casts a vote.
+- Facilitator permissions are enforced server-side for session changes, ticket changes, reveal, and finalization.
+- A facilitator remains a normal team participant: the same Google account can use **Join** to vote and **Facilitate** to manage the session.
+- Team-member email addresses and Google account identifiers are not returned by team/session APIs.
+- Hidden vote values are redacted by Apps Script until the facilitator reveals the round.
+- All protected requests use `POST` with `text/plain;charset=utf-8`; bearer credentials are never placed in URLs.
+- A restrictive Content Security Policy limits the frontend to its own assets, Google Identity Services, and the configured Apps Script hosts.
+
+The Apps Script `/exec` endpoint remains publicly reachable and is still subject to Apps Script quotas and denial-of-service limits. Do not store Jira tokens or other secrets in the frontend, and restrict edit access to the Apps Script project and backing Sheet.
 
 ## Known limitations
 
 - The app uses polling instead of real-time WebSockets.
 - Jira tickets are entered manually; there is no Jira integration.
-- There are no secure accounts, roles, or backend authorization.
+- Signing out removes the browser session, but an already copied token remains valid until its two-hour expiry or until all linked team memberships are deactivated.
 - There is no offline support or service worker.
 - There is no automatic statistics dashboard or historical reporting.
 - Apps Script and Google Sheets are not designed for large numbers of concurrent users.
@@ -139,12 +168,13 @@ The unconfigured scenario can always be tested without a real Apps Script backen
 2. Confirm that the warning is visible.
 3. Confirm that the app remains functional and makes no API requests.
 
-With demo records (`team-demo`, `session-demo`, `ticket-demo`, `member-demo`), the complete voting flow can be tested: vote as a participant, confirm that the DOM contains only “Voted” before reveal, reveal as the facilitator, save the final estimate, and start a new round. Also test the participant link from a GitHub Pages project subdirectory.
+With configured Google OAuth credentials and invited team-member emails, test the complete flow: sign in, vote as a participant, confirm that the DOM contains only “Voted” before reveal, reveal as a facilitator, save the final estimate, and start a new round. Also verify that a regular member receives `403` responses for facilitator actions and that changing request member IDs never changes the voting identity.
 
 When GJS is available, run the framework-free smoke tests with:
 
 ```bash
 gjs -m tests/smoke.mjs
+gjs -m tests/auth-smoke.mjs
 gjs -m tests/codegs-smoke.mjs
 ```
 

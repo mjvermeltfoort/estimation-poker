@@ -1,7 +1,16 @@
-const API_VERSION = 'v1';
+const API_VERSION = 'v2';
 const LOCK_TIMEOUT_MS = 10000;
 const MAX_PAGE_SIZE = 500;
 const ROUND_PROPERTY_PREFIX = 'estimationPoker.round.';
+const AUTH_SUBJECT_PROPERTY_PREFIX = 'estimationPoker.auth.subject.';
+const AUTH_MEMBER_PROPERTY_PREFIX = 'estimationPoker.auth.member.';
+const AUTH_SESSION_SECRET_PROPERTY = 'ESTIMATION_POKER_SESSION_SECRET';
+const GOOGLE_CLIENT_ID_PROPERTY = 'GOOGLE_CLIENT_ID';
+const GOOGLE_CLIENT_SECRET_PROPERTY = 'GOOGLE_CLIENT_SECRET';
+const GOOGLE_ALLOWED_ORIGINS_PROPERTY = 'GOOGLE_ALLOWED_ORIGINS';
+const GOOGLE_ALLOWED_DOMAIN_PROPERTY = 'GOOGLE_ALLOWED_DOMAIN';
+const AUTH_SESSION_TTL_SECONDS = 2 * 60 * 60;
+const AUTH_CLOCK_SKEW_SECONDS = 60;
 const VOTE_VALUES = [0.5, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 40];
 
 const SESSION_STATUSES = ['draft', 'active', 'completed', 'cancelled'];
@@ -79,12 +88,14 @@ function handleRequest_(method, e) {
           apiVersion: API_VERSION,
           endpoints: [
             'GET  ?action=health',
-            'GET  ?action=list&entity=teams',
-            'GET  ?action=get&entity=teams&id=...',
+            'POST action=authenticate',
+            'POST action=me',
+            'POST action=list',
+            'POST action=get',
             'POST action=create',
             'POST action=update',
             'POST action=delete',
-            'GET  ?action=sessionState&sessionId=...',
+            'POST action=sessionState',
             'POST action=submitVote',
             'POST action=revealTicket',
             'POST action=finalizeTicket'
@@ -103,57 +114,66 @@ function handleRequest_(method, e) {
           }
         });
 
+      case 'authenticate':
+        requirePost_(method);
+        return jsonResponse_(authenticateGoogle_(body));
+    }
+
+    requirePost_(method);
+    const actor = authenticateSession_(body.authToken);
+
+    switch (action) {
+      case 'me':
+        return jsonResponse_({ ok: true, data: publicActor_(actor) });
+
       case 'list':
         return jsonResponse_(listEntities_(
-          params.entity || body.entity,
-          params
+          actor,
+          body.entity,
+          body.filters || {}
         ));
 
       case 'get':
         return jsonResponse_(getEntity_(
-          params.entity || body.entity,
-          params.id || body.id
+          actor,
+          body.entity,
+          body.id
         ));
 
       case 'create':
-        requirePost_(method);
         return jsonResponse_(withScriptLock_(function() {
-          return createEntity_(body.entity, body.data || {});
+          return createEntity_(actor, body.entity, body.data || {});
         }));
 
       case 'update':
-        requirePost_(method);
         return jsonResponse_(withScriptLock_(function() {
-          return updateEntity_(body.entity, body.id, body.data || {});
+          return updateEntity_(actor, body.entity, body.id, body.data || {});
         }));
 
       case 'delete':
-        requirePost_(method);
         return jsonResponse_(withScriptLock_(function() {
-          return deleteEntity_(body.entity, body.id);
+          return deleteEntity_(actor, body.entity, body.id);
         }));
 
       case 'sessionState':
         return jsonResponse_(getSessionState_(
-          params.sessionId || body.sessionId
+          actor,
+          body.sessionId
         ));
 
       case 'submitVote':
-        requirePost_(method);
         return jsonResponse_(withScriptLock_(function() {
-          return submitVote_(body);
+          return submitVote_(actor, body);
         }));
 
       case 'revealTicket':
-        requirePost_(method);
         return jsonResponse_(withScriptLock_(function() {
-          return revealTicket_(body);
+          return revealTicket_(actor, body);
         }));
 
       case 'finalizeTicket':
-        requirePost_(method);
         return jsonResponse_(withScriptLock_(function() {
-          return finalizeTicket_(body);
+          return finalizeTicket_(actor, body);
         }));
 
       default:
@@ -176,10 +196,414 @@ function handleRequest_(method, e) {
   }
 }
 
-function listEntities_(entityName, filters) {
+function authenticateGoogle_(body) {
+  assertPlainObject_(body, 'body');
+  const code = requiredString_(body.code, 'code', 4096);
+  const redirectOrigin = requiredString_(body.redirectOrigin, 'redirectOrigin', 500);
+  const properties = PropertiesService.getScriptProperties();
+  const clientId = requiredConfiguration_(properties, GOOGLE_CLIENT_ID_PROPERTY);
+  const clientSecret = requiredConfiguration_(properties, GOOGLE_CLIENT_SECRET_PROPERTY);
+  const allowedOrigins = requiredConfiguration_(properties, GOOGLE_ALLOWED_ORIGINS_PROPERTY)
+    .split(',')
+    .map(function(value) { return value.trim().replace(/\/$/, ''); })
+    .filter(Boolean);
+  const normalizedOrigin = redirectOrigin.replace(/\/$/, '');
+
+  if (allowedOrigins.indexOf(normalizedOrigin) === -1) {
+    throw new ApiError_('ORIGIN_NOT_ALLOWED', 'This application origin is not allowed to sign in', 403);
+  }
+
+  const tokenResponse = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', {
+    method: 'post',
+    payload: {
+      code: code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: normalizedOrigin,
+      grant_type: 'authorization_code'
+    },
+    muteHttpExceptions: true
+  });
+  if (tokenResponse.getResponseCode() !== 200) {
+    throw new ApiError_('GOOGLE_AUTH_FAILED', 'Google could not verify this sign-in attempt', 401);
+  }
+  const tokens = parseExternalJson_(tokenResponse, 'Google token response');
+  const accessToken = requiredString_(tokens.access_token, 'access_token', 8192);
+  const idClaims = decodeJwtPayload_(tokens.id_token);
+  validateGoogleIdClaims_(idClaims, clientId);
+
+  const profileResponse = UrlFetchApp.fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+    method: 'get',
+    headers: { Authorization: 'Bearer ' + accessToken },
+    muteHttpExceptions: true
+  });
+  if (profileResponse.getResponseCode() !== 200) {
+    throw new ApiError_('GOOGLE_AUTH_FAILED', 'Google could not return the signed-in profile', 401);
+  }
+  const profile = parseExternalJson_(profileResponse, 'Google profile response');
+  if (!profile.sub || !sameId_(profile.sub, idClaims.sub) || !sameEmail_(profile.email, idClaims.email)) {
+    throw new ApiError_('GOOGLE_AUTH_FAILED', 'Google returned inconsistent identity information', 401);
+  }
+  if (!toBoolean_(profile.email_verified) || !toBoolean_(idClaims.email_verified)) {
+    throw new ApiError_('EMAIL_NOT_VERIFIED', 'A verified Google email address is required', 403);
+  }
+
+  const allowedDomain = cleanString_(properties.getProperty(GOOGLE_ALLOWED_DOMAIN_PROPERTY), 255).toLowerCase();
+  if (allowedDomain && String(idClaims.hd || '').toLowerCase() !== allowedDomain) {
+    throw new ApiError_('DOMAIN_NOT_ALLOWED', 'Use an account from the allowed Google Workspace domain', 403);
+  }
+
+  const actor = withScriptLock_(function() {
+    return bindGoogleIdentity_({
+      sub: requiredString_(profile.sub, 'sub', 255),
+      email: requiredString_(profile.email, 'email', 320).toLowerCase()
+    });
+  });
+  const session = issueSessionToken_(actor);
+  return {
+    ok: true,
+    data: {
+      token: session.token,
+      expiresAt: session.expiresAt,
+      user: publicActor_(actor)
+    }
+  };
+}
+
+function validateGoogleIdClaims_(claims, clientId) {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const audienceMatches = Array.isArray(claims.aud)
+    ? claims.aud.indexOf(clientId) !== -1
+    : sameId_(claims.aud, clientId);
+  if (!audienceMatches || ['accounts.google.com', 'https://accounts.google.com'].indexOf(claims.iss) === -1) {
+    throw new ApiError_('GOOGLE_AUTH_FAILED', 'The Google identity token is not intended for this application', 401);
+  }
+  if (!claims.sub || !claims.email || Number(claims.exp) < nowSeconds - AUTH_CLOCK_SKEW_SECONDS) {
+    throw new ApiError_('GOOGLE_AUTH_FAILED', 'The Google identity token is invalid or expired', 401);
+  }
+}
+
+function bindGoogleIdentity_(profile) {
+  const properties = PropertiesService.getScriptProperties();
+  const subjectKey = AUTH_SUBJECT_PROPERTY_PREFIX + profile.sub;
+  const existingIds = parsePropertyArray_(properties.getProperty(subjectKey));
+  const members = readRows_('TeamMembers');
+  const invitations = members.filter(function(member) {
+    return toBoolean_(member.active) && sameEmail_(member.email, profile.email);
+  });
+  const conflictingInvitation = invitations.find(function(member) {
+    const boundSubject = properties.getProperty(AUTH_MEMBER_PROPERTY_PREFIX + member.id);
+    return boundSubject && !sameId_(boundSubject, profile.sub);
+  });
+  if (conflictingInvitation) {
+    throw new ApiError_('ACCOUNT_ALREADY_LINKED', 'This invitation is already linked to another Google account', 403);
+  }
+
+  const memberIds = existingIds.slice();
+  invitations.forEach(function(member) {
+    const memberKey = AUTH_MEMBER_PROPERTY_PREFIX + member.id;
+    const boundSubject = properties.getProperty(memberKey);
+    if (!boundSubject) properties.setProperty(memberKey, profile.sub);
+    if (memberIds.indexOf(String(member.id)) === -1) memberIds.push(String(member.id));
+  });
+
+  if (!memberIds.length) {
+    throw new ApiError_(
+      'REGISTRATION_REQUIRED',
+      'No active team-member invitation matches this Google email address',
+      403
+    );
+  }
+  properties.setProperty(subjectKey, JSON.stringify(memberIds));
+  return actorForSubject_(profile.sub, profile.email);
+}
+
+function issueSessionToken_(actor) {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const payload = {
+    v: 1,
+    sub: actor.sub,
+    email: actor.email,
+    iat: nowSeconds,
+    exp: nowSeconds + AUTH_SESSION_TTL_SECONDS
+  };
+  const encodedPayload = base64UrlEncodeString_(JSON.stringify(payload));
+  const signature = signSessionPayload_(encodedPayload);
+  return {
+    token: encodedPayload + '.' + signature,
+    expiresAt: payload.exp * 1000
+  };
+}
+
+function authenticateSession_(token) {
+  if (token === undefined || token === null || String(token).trim() === '') {
+    throw new ApiError_('AUTH_REQUIRED', 'Sign in to continue', 401);
+  }
+  const normalizedToken = requiredString_(token, 'authToken', 16384);
+  const parts = normalizedToken.split('.');
+  if (parts.length !== 2 || !constantTimeEquals_(signSessionPayload_(parts[0]), parts[1])) {
+    throw new ApiError_('INVALID_SESSION', 'The sign-in session is invalid', 401);
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(base64UrlDecodeString_(parts[0]));
+  } catch (error) {
+    throw new ApiError_('INVALID_SESSION', 'The sign-in session is invalid', 401);
+  }
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (payload.v !== 1 || !payload.sub || !payload.email || !Number.isFinite(Number(payload.exp))) {
+    throw new ApiError_('INVALID_SESSION', 'The sign-in session is invalid', 401);
+  }
+  if (Number(payload.exp) < nowSeconds - AUTH_CLOCK_SKEW_SECONDS) {
+    throw new ApiError_('SESSION_EXPIRED', 'The sign-in session has expired', 401);
+  }
+  if (Number(payload.iat) > nowSeconds + AUTH_CLOCK_SKEW_SECONDS) {
+    throw new ApiError_('INVALID_SESSION', 'The sign-in session is invalid', 401);
+  }
+  return actorForSubject_(String(payload.sub), String(payload.email).toLowerCase());
+}
+
+function actorForSubject_(subject, email) {
+  const properties = PropertiesService.getScriptProperties();
+  const memberIds = parsePropertyArray_(properties.getProperty(AUTH_SUBJECT_PROPERTY_PREFIX + subject));
+  const members = readRows_('TeamMembers').filter(function(member) {
+    return memberIds.indexOf(String(member.id)) !== -1 &&
+      sameId_(properties.getProperty(AUTH_MEMBER_PROPERTY_PREFIX + member.id), subject) &&
+      toBoolean_(member.active);
+  });
+  if (!members.length) {
+    throw new ApiError_('MEMBERSHIP_REQUIRED', 'This Google account has no active team membership', 403);
+  }
+  const seenTeams = {};
+  members.forEach(function(member) {
+    const teamKey = String(member.teamId);
+    if (seenTeams[teamKey]) {
+      throw new ApiError_('AMBIGUOUS_MEMBERSHIP', 'This Google account has multiple active memberships for the same team', 409);
+    }
+    seenTeams[teamKey] = true;
+  });
+  return { sub: subject, email: email, memberships: members };
+}
+
+function publicActor_(actor) {
+  const firstMembership = actor.memberships[0];
+  return {
+    email: actor.email,
+    displayName: firstMembership.displayName || actor.email,
+    memberships: actor.memberships.map(function(member) {
+      return {
+        memberId: member.id,
+        teamId: member.teamId,
+        displayName: member.displayName,
+        role: member.role
+      };
+    })
+  };
+}
+
+function findMembership_(actor, teamId) {
+  return actor.memberships.find(function(member) {
+    return sameId_(member.teamId, teamId) && toBoolean_(member.active);
+  }) || null;
+}
+
+function requireTeamMembership_(actor, teamId) {
+  const normalizedTeamId = requiredString_(teamId, 'teamId', 200);
+  const membership = findMembership_(actor, normalizedTeamId);
+  if (!membership) throw new ApiError_('FORBIDDEN', 'You do not have access to this team', 403);
+  return membership;
+}
+
+function requireFacilitator_(actor, teamId) {
+  const membership = requireTeamMembership_(actor, teamId);
+  if (membership.role !== 'facilitator') {
+    throw new ApiError_('FACILITATOR_REQUIRED', 'Facilitator permission is required for this action', 403);
+  }
+  return membership;
+}
+
+function authorizeEntityRead_(actor, entityName, record) {
+  if (entityName === 'teams' || entityName === 'teamMembers') {
+    requireTeamMembership_(actor, entityName === 'teams' ? record.id : record.teamId);
+    return;
+  }
+  if (entityName === 'estimationSessions') {
+    requireTeamMembership_(actor, record.teamId);
+    return;
+  }
+  if (entityName === 'estimationTickets') {
+    const session = findById_('EstimationSessions', record.sessionId);
+    if (!session) throw new ApiError_('SESSION_NOT_FOUND', 'Session not found', 404);
+    requireTeamMembership_(actor, session.teamId);
+    return;
+  }
+  throw new ApiError_('FORBIDDEN', 'This entity cannot be read directly', 403);
+}
+
+function authorizeEntityMutation_(actor, entityName, record) {
+  if (entityName === 'estimationSessions') {
+    requireFacilitator_(actor, record.teamId);
+    return;
+  }
+  if (entityName === 'estimationTickets') {
+    const session = findById_('EstimationSessions', record.sessionId);
+    if (!session) throw new ApiError_('SESSION_NOT_FOUND', 'Session not found', 404);
+    requireFacilitator_(actor, session.teamId);
+    return;
+  }
+  throw new ApiError_('FORBIDDEN', 'This entity cannot be changed through the public API', 403);
+}
+
+function sanitizeEntity_(entityName, record, actor) {
+  if (entityName === 'teamMembers') return sanitizeMember_(record);
+  const config = getEntityConfig_(entityName);
+  const result = {};
+  config.fields.forEach(function(field) {
+    if (record[field] !== undefined) result[field] = record[field];
+  });
+  if (entityName === 'estimationSessions') {
+    result.canFacilitate = Boolean(findMembership_(actor, record.teamId) && findMembership_(actor, record.teamId).role === 'facilitator');
+  }
+  return result;
+}
+
+function sanitizeVote_(vote, includeEstimate) {
+  const result = redactVote_(vote);
+  delete result.hasVoted;
+  if (includeEstimate) result.estimateHours = vote.estimateHours;
+  return result;
+}
+
+function sanitizeMember_(member) {
+  return {
+    id: member.id,
+    teamId: member.teamId,
+    displayName: member.displayName,
+    role: member.role,
+    active: member.active
+  };
+}
+
+function signSessionPayload_(encodedPayload) {
+  return Utilities.base64EncodeWebSafe(
+    Utilities.computeHmacSha256Signature(encodedPayload, getOrCreateSessionSecret_())
+  ).replace(/=+$/, '');
+}
+
+function getOrCreateSessionSecret_() {
+  const properties = PropertiesService.getScriptProperties();
+  let secret = properties.getProperty(AUTH_SESSION_SECRET_PROPERTY);
+  if (secret) return secret;
+  return withScriptLock_(function() {
+    secret = properties.getProperty(AUTH_SESSION_SECRET_PROPERTY);
+    if (!secret) {
+      secret = [Utilities.getUuid(), Utilities.getUuid(), Utilities.getUuid(), Utilities.getUuid()].join('');
+      properties.setProperty(AUTH_SESSION_SECRET_PROPERTY, secret);
+    }
+    return secret;
+  });
+}
+
+function base64UrlEncodeString_(value) {
+  return Utilities.base64EncodeWebSafe(Utilities.newBlob(value).getBytes()).replace(/=+$/, '');
+}
+
+function base64UrlDecodeString_(value) {
+  let paddedValue = String(value);
+  while (paddedValue.length % 4) paddedValue += '=';
+  return Utilities.newBlob(Utilities.base64DecodeWebSafe(paddedValue)).getDataAsString();
+}
+
+function decodeJwtPayload_(token) {
+  const normalizedToken = requiredString_(token, 'id_token', 16384);
+  const parts = normalizedToken.split('.');
+  if (parts.length !== 3) throw new ApiError_('GOOGLE_AUTH_FAILED', 'Google returned an invalid identity token', 401);
+  try {
+    return JSON.parse(base64UrlDecodeString_(parts[1]));
+  } catch (error) {
+    throw new ApiError_('GOOGLE_AUTH_FAILED', 'Google returned an invalid identity token', 401);
+  }
+}
+
+function parseExternalJson_(response, label) {
+  try {
+    const value = JSON.parse(response.getContentText());
+    assertPlainObject_(value, label);
+    return value;
+  } catch (error) {
+    throw new ApiError_('UPSTREAM_INVALID_RESPONSE', label + ' was not valid JSON', 502);
+  }
+}
+
+function requiredConfiguration_(properties, name) {
+  const value = cleanString_(properties.getProperty(name), 10000);
+  if (!value) throw new ApiError_('AUTH_NOT_CONFIGURED', 'Missing Apps Script property: ' + name, 500);
+  return value;
+}
+
+function parsePropertyArray_(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function sameEmail_(left, right) {
+  return String(left || '').trim().toLowerCase() === String(right || '').trim().toLowerCase();
+}
+
+function constantTimeEquals_(left, right) {
+  const leftValue = String(left || '');
+  const rightValue = String(right || '');
+  let difference = leftValue.length ^ rightValue.length;
+  const length = Math.max(leftValue.length, rightValue.length);
+  for (let index = 0; index < length; index++) {
+    difference |= (leftValue.charCodeAt(index) || 0) ^ (rightValue.charCodeAt(index) || 0);
+  }
+  return difference === 0;
+}
+
+function resetGoogleBindingForMember(memberId) {
+  const normalizedId = requiredString_(memberId, 'memberId', 200);
+  const properties = PropertiesService.getScriptProperties();
+  const memberKey = AUTH_MEMBER_PROPERTY_PREFIX + normalizedId;
+  const subject = properties.getProperty(memberKey);
+  if (!subject) return false;
+  properties.deleteProperty(memberKey);
+  const subjectKey = AUTH_SUBJECT_PROPERTY_PREFIX + subject;
+  const remaining = parsePropertyArray_(properties.getProperty(subjectKey)).filter(function(id) {
+    return !sameId_(id, normalizedId);
+  });
+  if (remaining.length) properties.setProperty(subjectKey, JSON.stringify(remaining));
+  else properties.deleteProperty(subjectKey);
+  return true;
+}
+
+function listEntities_(actor, entityName, filters) {
   const config = getPublicEntityConfig_(entityName);
   let rows = readRows_(config.sheetName);
-  const reserved = ['action', 'entity', 'limit', 'offset'];
+  assertPlainObject_(filters, 'filters');
+  const reserved = ['limit', 'offset'];
+
+  if (entityName === 'teams') {
+    rows = rows.filter(function(row) {
+      return Boolean(findMembership_(actor, row.id));
+    });
+  } else if (entityName === 'teamMembers') {
+    const teamId = requiredString_(filters.teamId, 'teamId', 200);
+    requireTeamMembership_(actor, teamId);
+    rows = rows.filter(function(row) { return sameId_(row.teamId, teamId); });
+  } else if (entityName === 'estimationSessions') {
+    rows = rows.filter(function(row) {
+      return Boolean(findMembership_(actor, row.teamId));
+    });
+  } else {
+    throw new ApiError_('FORBIDDEN', 'This entity cannot be listed directly', 403);
+  }
 
   Object.keys(filters || {}).forEach(function(key) {
     if (reserved.indexOf(key) !== -1 || filters[key] === '') return;
@@ -196,7 +620,9 @@ function listEntities_(entityName, filters) {
 
   return {
     ok: true,
-    data: rows.slice(offset, offset + limit),
+    data: rows.slice(offset, offset + limit).map(function(row) {
+      return sanitizeEntity_(entityName, row, actor);
+    }),
     pagination: {
       offset: offset,
       limit: limit,
@@ -205,7 +631,7 @@ function listEntities_(entityName, filters) {
   };
 }
 
-function getEntity_(entityName, id) {
+function getEntity_(actor, entityName, id) {
   const config = getPublicEntityConfig_(entityName);
   const normalizedId = requiredString_(id, 'id', 200);
   const record = findById_(config.sheetName, normalizedId);
@@ -214,13 +640,27 @@ function getEntity_(entityName, id) {
     throw new ApiError_('NOT_FOUND', entityName + ' not found', 404);
   }
 
-  return { ok: true, data: record };
+  authorizeEntityRead_(actor, entityName, record);
+
+  return { ok: true, data: sanitizeEntity_(entityName, record, actor) };
 }
 
-function createEntity_(entityName, data) {
+function createEntity_(actor, entityName, data) {
   const config = getPublicEntityConfig_(entityName);
   assertPlainObject_(data, 'data');
   assertAllowedKeys_(data, config.fields, 'data');
+
+  if (entityName === 'estimationSessions') {
+    const membership = requireFacilitator_(actor, data.teamId);
+    data = copyObject_(data);
+    data.createdByMemberId = membership.id;
+  } else if (entityName === 'estimationTickets') {
+    const targetSession = findById_('EstimationSessions', data.sessionId);
+    if (!targetSession) throw new ApiError_('SESSION_NOT_FOUND', 'Session not found', 404);
+    requireFacilitator_(actor, targetSession.teamId);
+  } else {
+    throw new ApiError_('FORBIDDEN', 'This entity cannot be created through the public API', 403);
+  }
 
   const record = {};
   config.fields.forEach(function(field) {
@@ -237,10 +677,10 @@ function createEntity_(entityName, data) {
   validateRequired_(config.required, record);
   appendRecord_(config.sheetName, record);
 
-  return { ok: true, data: record };
+  return { ok: true, data: sanitizeEntity_(entityName, record, actor) };
 }
 
-function updateEntity_(entityName, id, patch) {
+function updateEntity_(actor, entityName, id, patch) {
   const config = getPublicEntityConfig_(entityName);
   const normalizedId = requiredString_(id, 'id', 200);
   assertPlainObject_(patch, 'data');
@@ -254,6 +694,8 @@ function updateEntity_(entityName, id, patch) {
   if (!current) {
     throw new ApiError_('NOT_FOUND', entityName + ' not found', 404);
   }
+
+  authorizeEntityMutation_(actor, entityName, current);
 
   const safePatch = copyObject_(patch);
   prepareUpdate_(entityName, current, safePatch);
@@ -269,10 +711,10 @@ function updateEntity_(entityName, id, patch) {
   });
 
   const result = updateRecord_(config.sheetName, normalizedId, safePatch);
-  return { ok: true, data: result };
+  return { ok: true, data: sanitizeEntity_(entityName, result, actor) };
 }
 
-function deleteEntity_(entityName, id) {
+function deleteEntity_(actor, entityName, id) {
   const config = getPublicEntityConfig_(entityName);
   const normalizedId = requiredString_(id, 'id', 200);
   const current = findById_(config.sheetName, normalizedId);
@@ -281,19 +723,22 @@ function deleteEntity_(entityName, id) {
     throw new ApiError_('NOT_FOUND', entityName + ' not found', 404);
   }
 
+  authorizeEntityMutation_(actor, entityName, current);
+
   assertNoDependencies_(entityName, current);
   const deleted = deleteRecord_(config.sheetName, normalizedId);
   if (entityName === 'estimationTickets') clearRound_(normalizedId);
 
-  return { ok: true, data: deleted };
+  return { ok: true, data: sanitizeEntity_(entityName, deleted, actor) };
 }
 
-function getSessionState_(sessionId) {
+function getSessionState_(actor, sessionId) {
   const normalizedSessionId = requiredString_(sessionId, 'sessionId', 200);
   const session = findById_('EstimationSessions', normalizedSessionId);
   if (!session) {
     throw new ApiError_('SESSION_NOT_FOUND', 'Session not found', 404);
   }
+  const viewer = requireTeamMembership_(actor, session.teamId);
 
   const team = findById_('Teams', session.teamId);
   if (!team) {
@@ -333,7 +778,7 @@ function getSessionState_(sessionId) {
     const valuesMayBeRevealed = ['revealed', 'estimated'].indexOf(currentTicket.status) !== -1;
 
     publicVotes = currentVotes.map(function(vote) {
-      return valuesMayBeRevealed ? vote : redactVote_(vote);
+      return valuesMayBeRevealed ? sanitizeVote_(vote, true) : redactVote_(vote);
     });
 
     if (valuesMayBeRevealed) {
@@ -346,34 +791,43 @@ function getSessionState_(sessionId) {
   return {
     ok: true,
     data: {
-      session: session,
-      team: team,
-      members: members,
-      tickets: tickets,
-      currentTicket: currentTicket,
+      session: sanitizeEntity_('estimationSessions', session, actor),
+      team: sanitizeEntity_('teams', team, actor),
+      members: members.map(sanitizeMember_),
+      tickets: tickets.map(function(ticket) { return sanitizeEntity_('estimationTickets', ticket, actor); }),
+      currentTicket: currentTicket ? sanitizeEntity_('estimationTickets', currentTicket, actor) : null,
       currentRoundNumber: currentRoundNumber,
       votes: publicVotes,
-      statistics: statistics
+      statistics: statistics,
+      viewer: {
+        memberId: viewer.id,
+        displayName: viewer.displayName,
+        role: viewer.role,
+        canFacilitate: viewer.role === 'facilitator'
+      }
     }
   };
 }
 
-function submitVote_(body) {
+function submitVote_(actor, body) {
   assertPlainObject_(body, 'body');
   validateRequired_([
-    'sessionId', 'ticketId', 'teamMemberId',
-    'roundNumber', 'estimateHours'
+    'sessionId', 'ticketId', 'roundNumber', 'estimateHours'
   ], body);
 
   const sessionId = requiredString_(body.sessionId, 'sessionId', 200);
   const ticketId = requiredString_(body.ticketId, 'ticketId', 200);
-  const memberId = requiredString_(body.teamMemberId, 'teamMemberId', 200);
   const roundNumber = parseInteger_(body.roundNumber, 'roundNumber', 1, 1000000);
   const estimateHours = parseVote_(body.estimateHours);
 
   const session = findById_('EstimationSessions', sessionId);
   if (!session) {
     throw new ApiError_('SESSION_NOT_FOUND', 'Session not found', 404);
+  }
+  const member = requireTeamMembership_(actor, session.teamId);
+  const memberId = member.id;
+  if (body.teamMemberId && !sameId_(body.teamMemberId, memberId)) {
+    throw new ApiError_('IDENTITY_MISMATCH', 'A vote can only be submitted for the signed-in user', 403);
   }
   if (['completed', 'cancelled'].indexOf(session.status) !== -1) {
     throw new ApiError_('VOTING_CLOSED', 'Voting in this session is closed', 409);
@@ -388,11 +842,6 @@ function submitVote_(body) {
   }
   if (['pending', 'voting'].indexOf(ticket.status) === -1) {
     throw new ApiError_('VOTING_CLOSED', 'Voting for this ticket is closed', 409);
-  }
-
-  const member = findById_('TeamMembers', memberId);
-  if (!member || !sameId_(member.teamId, session.teamId) || !toBoolean_(member.active)) {
-    throw new ApiError_('MEMBER_NOT_ELIGIBLE', 'This team member may not vote in this session', 403);
   }
 
   const votes = readRows_('Votes');
@@ -443,7 +892,7 @@ function submitVote_(body) {
   };
 }
 
-function revealTicket_(body) {
+function revealTicket_(actor, body) {
   assertPlainObject_(body, 'body');
   const ticketId = requiredString_(body.ticketId, 'ticketId', 200);
   const roundNumber = parseInteger_(body.roundNumber, 'roundNumber', 1, 1000000);
@@ -457,6 +906,7 @@ function revealTicket_(body) {
   if (!session || !sameId_(session.currentTicketId, ticketId)) {
     throw new ApiError_('TICKET_NOT_ACTIVE', 'This ticket is not the active ticket', 409);
   }
+  requireFacilitator_(actor, session.teamId);
   if (['completed', 'cancelled'].indexOf(session.status) !== -1) {
     throw new ApiError_('SESSION_CLOSED', 'This session is closed', 409);
   }
@@ -482,8 +932,8 @@ function revealTicket_(body) {
   return {
     ok: true,
     data: {
-      ticket: updatedTicket,
-      votes: roundVotes,
+      ticket: sanitizeEntity_('estimationTickets', updatedTicket, actor),
+      votes: roundVotes.map(function(vote) { return sanitizeVote_(vote, true); }),
       statistics: calculateStatistics_(roundVotes.map(function(vote) {
         return Number(vote.estimateHours);
       }))
@@ -491,7 +941,7 @@ function revealTicket_(body) {
   };
 }
 
-function finalizeTicket_(body) {
+function finalizeTicket_(actor, body) {
   assertPlainObject_(body, 'body');
   const ticketId = requiredString_(body.ticketId, 'ticketId', 200);
   const finalEstimateHours = parseDecimal_(
@@ -517,6 +967,7 @@ function finalizeTicket_(body) {
   if (!session || !sameId_(session.currentTicketId, ticketId)) {
     throw new ApiError_('TICKET_NOT_ACTIVE', 'This ticket is not the active ticket', 409);
   }
+  requireFacilitator_(actor, session.teamId);
   if (['completed', 'cancelled'].indexOf(session.status) !== -1) {
     throw new ApiError_('SESSION_CLOSED', 'This session is closed', 409);
   }
@@ -526,7 +977,7 @@ function finalizeTicket_(body) {
     finalEstimateHours: finalEstimateHours
   });
 
-  return { ok: true, data: updatedTicket };
+  return { ok: true, data: sanitizeEntity_('estimationTickets', updatedTicket, actor) };
 }
 
 function prepareUpdate_(entityName, current, patch) {

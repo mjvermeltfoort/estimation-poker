@@ -35,6 +35,9 @@ jobs:
           test -f site/index.html
           test -f site/css/styles.css
           test -f site/js/app.js
+          test -f site/js/auth.js
+          test -f site/js/authSession.js
+          test -f site/js/config.js
           test -f site/.nojekyll
 
       - name: Upload Pages artifact
