@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Interne estimation-pokerapp voor gezamenlijke schattingen in uren.">
+  <meta name="theme-color" content="#132a46">
+  <title>Estimation Poker</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./css/styles.css">
+  <script type="module" src="./js/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#app">Ga naar hoofdinhoud</a>
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="brand" href="#/" aria-label="Estimation Poker startpagina">
+        <svg class="brand__mark" viewBox="0 0 42 42" aria-hidden="true">
+          <rect x="6" y="10" width="19" height="25" rx="4"></rect>
+          <rect x="17" y="6" width="19" height="25" rx="4"></rect>
+          <path d="m22 18 4 4 7-8"></path>
+        </svg>
+        <span>Estimation Poker</span>
+      </a>
+      <nav aria-label="Hoofdnavigatie">
+        <a href="#/" data-nav="home">Sessies</a>
+        <a href="#/sessions/new" data-nav="create">Nieuwe sessie</a>
+      </nav>
+    </div>
+  </header>
+
+  <div id="config-banner" class="config-banner" role="status" hidden></div>
+  <div id="fatal-region" class="shell" aria-live="assertive"></div>
+  <main id="app" class="shell" tabindex="-1"></main>
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
+
+  <footer class="site-footer">
+    <div class="shell">Interne MVP · Schattingen zijn hulpmiddelen voor het teamgesprek.</div>
+  </footer>
+</body>
+</html>
