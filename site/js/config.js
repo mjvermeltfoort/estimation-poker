@@ -1,5 +1,5 @@
 export const CONFIG = {
-  apiUrl: "PLAATS_HIER_DE_GOOGLE_APPS_SCRIPT_EXEC_URL",
+  apiUrl: "https://script.google.com/macros/s/AKfycbyTJTFiuct48J2vCf5tVCkx5J7MmXcUYOgzpcQoiVW4M1CX9Pc8y7Y2Xg2OHls2Pikr/exec",
   pollingIntervalMs: 3000,
   hiddenPollingIntervalMs: 15000,
   requestTimeoutMs: 15000,
