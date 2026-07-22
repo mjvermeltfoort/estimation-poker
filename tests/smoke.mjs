@@ -24,13 +24,13 @@ function assert(condition, message) {
 }
 
 const participantRoute = parseHashRoute("#/session/session-demo?member=member-demo");
-assert(participantRoute.name === "session", "Deelnemersroute wordt niet herkend.");
-assert(participantRoute.params.sessionId === "session-demo", "Sessieparameter is onjuist.");
-assert(participantRoute.query.get("member") === "member-demo", "Hash-queryparameter is onjuist.");
+assert(participantRoute.name === "session", "Participant route is not recognized.");
+assert(participantRoute.params.sessionId === "session-demo", "Session parameter is incorrect.");
+assert(participantRoute.query.get("member") === "member-demo", "Hash query parameter is incorrect.");
 
 const createRoute = parseHashRoute("#/sessions/new");
-assert(createRoute.name === "create-session", "Nieuwe-sessieroute wordt niet herkend.");
-assert(parseHashRoute("#/onbekend").name === "not-found", "Onbekende route geeft geen 404.");
+assert(createRoute.name === "create-session", "New-session route is not recognized.");
+assert(parseHashRoute("#/unknown").name === "not-found", "Unknown route does not return a 404.");
 
 const statistics = calculateStatistics([
   { estimateHours: 3 },
@@ -38,18 +38,18 @@ const statistics = calculateStatistics([
   { estimateHours: 8 },
   { estimateHours: 4 },
 ]);
-assert(statistics.count === 4, "Aantal stemmen is onjuist.");
-assert(statistics.min === 3 && statistics.max === 8, "Minimum of maximum is onjuist.");
-assert(statistics.average === 5.25 && statistics.median === 5, "Gemiddelde of mediaan is onjuist.");
+assert(statistics.count === 4, "Vote count is incorrect.");
+assert(statistics.min === 3 && statistics.max === 8, "Minimum or maximum is incorrect.");
+assert(statistics.average === 5.25 && statistics.median === 5, "Average or median is incorrect.");
 
 const sorted = sortTickets([{ id: "late", sortOrder: 2 }, { id: "first", sortOrder: 1 }]);
-assert(sorted[0].id === "first", "Tickets worden niet op sortOrder gesorteerd.");
-assert(statusLabel("voting") === "Stemmen", "Statuslabel is onjuist.");
+assert(sorted[0].id === "first", "Tickets are not sorted by sortOrder.");
+assert(statusLabel("voting") === "Voting", "Status label is incorrect.");
 const expectedConfiguredState = Boolean(
   CONFIG.apiUrl
-    && !CONFIG.apiUrl.includes("PLAATS_HIER")
+    && !CONFIG.apiUrl.includes("PASTE_HERE")
     && /^https:\/\//i.test(CONFIG.apiUrl),
 );
-assert(isApiConfigured() === expectedConfiguredState, "De API-configuratiestatus is onjuist.");
+assert(isApiConfigured() === expectedConfiguredState, "API configuration status is incorrect.");
 
-print("Smoke tests geslaagd");
+print("Smoke tests passed");

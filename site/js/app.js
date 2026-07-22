@@ -30,9 +30,9 @@ function updateConfigBanner() {
   }
   configBanner.hidden = false;
   const strong = document.createElement("strong");
-  strong.textContent = "API-configuratie ontbreekt. ";
+  strong.textContent = "API configuration is missing. ";
   const text = document.createElement("span");
-  text.textContent = "Vul de Google Apps Script /exec-URL in bij apiUrl in site/js/config.js. Er worden tot die tijd geen netwerkrequests uitgevoerd.";
+  text.textContent = "Set the Google Apps Script /exec URL as apiUrl in site/js/config.js. No network requests will be made until then.";
   configBanner.replaceChildren(strong, text);
 }
 
@@ -41,7 +41,7 @@ async function routeToView(route, generation, { background = false, force = fals
   const activeElement = document.activeElement;
   if (background && !force && activeElement?.matches("input, textarea, select")) return;
   const refreshStatus = document.querySelector("#refresh-status");
-  if (background && refreshStatus) refreshStatus.textContent = "Bijwerken…";
+  if (background && refreshStatus) refreshStatus.textContent = "Refreshing…";
 
   const isCurrent = () => generation === routeGeneration;
   const refresh = (forceRefresh = false) => routeToView(route, generation, { background: true, force: forceRefresh });

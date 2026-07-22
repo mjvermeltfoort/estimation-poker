@@ -13,7 +13,7 @@ function resolveStorage(kind) {
     storage.removeItem(testKey);
     return storage;
   } catch (error) {
-    console.warn(`${kind} is niet beschikbaar.`, error);
+    console.warn(`${kind} is unavailable.`, error);
     return null;
   }
 }
@@ -25,7 +25,7 @@ export function getStoredValue(key, fallback = null, kind = "localStorage") {
     const value = storage.getItem(key);
     return value === null ? fallback : JSON.parse(value);
   } catch (error) {
-    console.warn(`Ongeldige opgeslagen waarde voor ${key}.`, error);
+    console.warn(`Invalid stored value for ${key}.`, error);
     return fallback;
   }
 }
@@ -37,7 +37,7 @@ export function setStoredValue(key, value, kind = "localStorage") {
     storage.setItem(key, JSON.stringify(value));
     return true;
   } catch (error) {
-    console.warn(`Opslaan van ${key} is mislukt.`, error);
+    console.warn(`Failed to save ${key}.`, error);
     return false;
   }
 }
@@ -49,7 +49,7 @@ export function removeStoredValue(key, kind = "localStorage") {
     storage.removeItem(key);
     return true;
   } catch (error) {
-    console.warn(`Verwijderen van ${key} is mislukt.`, error);
+    console.warn(`Failed to remove ${key}.`, error);
     return false;
   }
 }

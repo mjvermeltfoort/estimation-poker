@@ -34,12 +34,12 @@ function chooseFacilitator(app, model, sessionId) {
   const facilitators = activeMembers.filter((member) => member.role === "facilitator");
   const choices = facilitators.length ? facilitators : activeMembers;
   const chooser = el("section", { className: "member-choice" }, [
-    el("p", { className: "eyebrow", text: "Faciliteren" }),
-    el("h1", { text: model.session.name || "Estimation-sessie" }),
-    el("p", { className: "lead", text: "Kies wie deze sessie begeleidt. Dit is herkenning, geen veilige autorisatie." }),
+    el("p", { className: "eyebrow", text: "Facilitate" }),
+    el("h1", { text: model.session.name || "Estimation session" }),
+    el("p", { className: "lead", text: "Select who will facilitate this session. This is for identification only and does not provide secure authorization." }),
   ]);
   if (!facilitators.length && activeMembers.length) {
-    chooser.append(el("p", { className: "inline-warning", text: "Geen actief teamlid heeft de facilitatorrol. Voor deze MVP kan ieder actief teamlid worden gekozen." }));
+    chooser.append(el("p", { className: "inline-warning", text: "No active team member has the facilitator role. For this MVP, any active team member can be selected." }));
   }
   const grid = el("div", { className: "member-grid" });
   choices.forEach((member) => {
@@ -55,8 +55,8 @@ function chooseFacilitator(app, model, sessionId) {
     });
     grid.append(button);
   });
-  chooser.append(choices.length ? grid : el("div", { className: "empty-state empty-state--compact" }, [el("h2", { text: "Geen actieve teamleden" }), el("p", { text: "Voeg eerst een actief teamlid toe." })]));
-  chooser.append(el("a", { className: "button button--ghost", href: "#/", text: "Terug naar start" }));
+  chooser.append(choices.length ? grid : el("div", { className: "empty-state empty-state--compact" }, [el("h2", { text: "No active team members" }), el("p", { text: "Add an active team member first." })]));
+  chooser.append(el("a", { className: "button button--ghost", href: "#/", text: "Back to home" }));
   app.replaceChildren(chooser);
 }
 
@@ -67,7 +67,7 @@ function participantList(model, currentVotes, revealed) {
     list.append(el("li", { className: "participant" }, [
       el("span", { className: "avatar avatar--small", text: String(member.displayName || "?").slice(0, 1).toUpperCase() }),
       el("span", { className: "participant__name", text: member.displayName || member.id }),
-      el("span", { className: `vote-state ${vote ? "vote-state--done" : ""}`, text: revealed && vote ? formatHours(vote.estimateHours) : vote ? "Gestemd" : "Nog niet gestemd" }),
+      el("span", { className: `vote-state ${vote ? "vote-state--done" : ""}`, text: revealed && vote ? formatHours(vote.estimateHours) : vote ? "Voted" : "Not voted yet" }),
     ]));
   });
   return list;
@@ -77,11 +77,11 @@ function statsGrid(votes, suppliedStatistics, finalEstimateHours) {
   const stats = suppliedStatistics || calculateStatistics(votes);
   const grid = el("dl", { className: "stats-grid" });
   [
-    ["Stemmen", stats.count], ["Gemiddelde", formatHours(stats.average)], ["Mediaan", formatHours(stats.median)],
+    ["Votes", stats.count], ["Average", formatHours(stats.average)], ["Median", formatHours(stats.median)],
     ["Minimum", formatHours(stats.min)], ["Maximum", formatHours(stats.max)],
   ].forEach(([label, value]) => grid.append(el("div", {}, [el("dt", { text: label }), el("dd", { text: String(value ?? "—") })])));
   if (finalEstimateHours !== undefined && finalEstimateHours !== null && finalEstimateHours !== "") {
-    grid.append(el("div", { className: "stat-final" }, [el("dt", { text: "Definitief" }), el("dd", { text: formatHours(finalEstimateHours) })]));
+    grid.append(el("div", { className: "stat-final" }, [el("dt", { text: "Final" }), el("dd", { text: formatHours(finalEstimateHours) })]));
   }
   return { grid, stats };
 }
@@ -96,7 +96,7 @@ async function copyText(text) {
   input.select();
   const copied = document.execCommand("copy");
   input.remove();
-  if (!copied) throw new Error("Kopiëren wordt niet ondersteund door deze browser.");
+  if (!copied) throw new Error("Copying is not supported by this browser.");
 }
 
 function renderTicketList(model, currentTicket, completed, activateTicket) {
@@ -115,8 +115,8 @@ function renderTicketList(model, currentTicket, completed, activateTicket) {
         el("strong", { text: ticket.jiraIssueKey || "Ticket" }),
         el("span", {
           text: ticket.finalEstimateHours !== undefined && ticket.finalEstimateHours !== null && ticket.finalEstimateHours !== ""
-            ? `${ticket.summary || "Geen titel"} · ${formatHours(ticket.finalEstimateHours)}`
-            : ticket.summary || "Geen titel",
+            ? `${ticket.summary || "No title"} · ${formatHours(ticket.finalEstimateHours)}`
+            : ticket.summary || "No title",
         }),
       ]),
       statusBadge(ticket.status),
@@ -130,15 +130,15 @@ function renderTicketList(model, currentTicket, completed, activateTicket) {
 function addTicketForm(model, completed, refresh) {
   const form = el("form", { className: "compact-form", noValidate: true });
   const key = el("input", { id: "new-jira-key", placeholder: "ABC-123", disabled: completed });
-  const summary = el("input", { id: "new-ticket-summary", placeholder: "Tickettitel", disabled: completed });
-  const description = el("textarea", { id: "new-ticket-description", placeholder: "Omschrijving (optioneel)", rows: 3, disabled: completed });
+  const summary = el("input", { id: "new-ticket-summary", placeholder: "Ticket title", disabled: completed });
+  const description = el("textarea", { id: "new-ticket-description", placeholder: "Description (optional)", rows: 3, disabled: completed });
   const keyError = el("p", { className: "field-error" });
   const summaryError = el("p", { className: "field-error" });
-  const submit = el("button", { className: "button button--primary", type: "submit", text: "Ticket toevoegen", disabled: completed });
+  const submit = el("button", { className: "button button--primary", type: "submit", text: "Add ticket", disabled: completed });
   form.append(
-    el("div", { className: "field" }, [el("label", { htmlFor: "new-jira-key", text: "Jira-key *" }), key, keyError]),
-    el("div", { className: "field" }, [el("label", { htmlFor: "new-ticket-summary", text: "Titel *" }), summary, summaryError]),
-    el("div", { className: "field field--wide" }, [el("label", { htmlFor: "new-ticket-description", text: "Omschrijving" }), description]),
+    el("div", { className: "field" }, [el("label", { htmlFor: "new-jira-key", text: "Jira key *" }), key, keyError]),
+    el("div", { className: "field" }, [el("label", { htmlFor: "new-ticket-summary", text: "Title *" }), summary, summaryError]),
+    el("div", { className: "field field--wide" }, [el("label", { htmlFor: "new-ticket-description", text: "Description" }), description]),
     el("div", { className: "field--wide" }, [submit]),
   );
   form.addEventListener("submit", async (event) => {
@@ -148,14 +148,14 @@ function addTicketForm(model, completed, refresh) {
     keyError.textContent = "";
     summaryError.textContent = "";
     let valid = true;
-    if (!normalizedKey) { keyError.textContent = "Vul een Jira-key in."; valid = false; }
-    if (!summary.value.trim()) { summaryError.textContent = "Vul een titel in."; valid = false; }
+    if (!normalizedKey) { keyError.textContent = "Enter a Jira key."; valid = false; }
+    if (!summary.value.trim()) { summaryError.textContent = "Enter a title."; valid = false; }
     if (model.tickets.some((ticket) => String(ticket.jiraIssueKey || "").trim().toUpperCase() === normalizedKey)) {
-      keyError.textContent = "Deze Jira-key staat al in de sessie.";
+      keyError.textContent = "This Jira key is already in the session.";
       valid = false;
     }
     if (!valid) return;
-    setBusy(submit, true, "Toevoegen…");
+    setBusy(submit, true, "Adding…");
     try {
       const sortOrder = model.tickets.reduce((maximum, ticket) => Math.max(maximum, Number(ticket.sortOrder) || 0), 0) + 1;
       await create("estimationTickets", {
@@ -167,7 +167,7 @@ function addTicketForm(model, completed, refresh) {
         sortOrder,
         createdAt: new Date().toISOString(),
       });
-      showToast("Ticket toegevoegd", "success");
+      showToast("Ticket added", "success");
       await refresh(true);
     } catch (error) {
       showToast(errorMessage(error), "error");
@@ -195,7 +195,7 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
   async function activateTicket(ticket) {
     if (completed) return;
     if (["estimated", "revealed", "skipped"].includes(ticket.status)
-      && !window.confirm("Dit ticket is al behandeld. Wilt u het toch opnieuw activeren?")) return;
+      && !window.confirm("This ticket has already been handled. Do you still want to reactivate it?")) return;
     try {
       await update("estimationSessions", sessionId, {
         currentTicketId: ticket.id,
@@ -205,7 +205,7 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
       await update("estimationTickets", ticket.id, { status: "voting" });
       const key = roundStorageKey(sessionId, ticket.id);
       if (!getStoredValue(key, null, "sessionStorage")) setStoredValue(key, 1, "sessionStorage");
-      showToast(`${ticket.jiraIssueKey || "Ticket"} is actief`, "success");
+      showToast(`${ticket.jiraIssueKey || "Ticket"} is active`, "success");
       await refresh(true);
     } catch (error) {
       showToast(errorMessage(error), "error");
@@ -215,13 +215,13 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
   const heading = el("div", { className: "page-heading" }, [
     el("div", {}, [
       el("p", { className: "eyebrow", text: `Facilitator · ${facilitator.displayName || facilitator.id}` }),
-      el("h1", { text: session.name || "Estimation-sessie" }),
+      el("h1", { text: session.name || "Estimation session" }),
       el("div", { className: "meta-row" }, [statusBadge(session.status), el("span", { text: `${model.tickets.length} ticket${model.tickets.length === 1 ? "" : "s"}` }), el("span", { className: "refresh-indicator", id: "refresh-status", "aria-live": "polite" })]),
     ]),
     el("div", { className: "button-row" }, [
-      el("a", { className: "button button--ghost", href: "#/", text: "Startpagina" }),
+      el("a", { className: "button button--ghost", href: "#/", text: "Home" }),
       (() => {
-        const change = el("button", { className: "button button--secondary", type: "button", text: "Wissel facilitator" });
+        const change = el("button", { className: "button button--secondary", type: "button", text: "Change facilitator" });
         change.addEventListener("click", () => { removeStoredValue(STORAGE_KEYS.facilitatorMemberId); refresh(true); });
         return change;
       })(),
@@ -229,11 +229,11 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
   ]);
 
   const sharePanel = el("section", { className: "share-bar" }, [
-    el("div", {}, [el("strong", { text: "Deelnemerslink" }), el("span", { className: "share-url", text: shareUrl })]),
+    el("div", {}, [el("strong", { text: "Participant link" }), el("span", { className: "share-url", text: shareUrl })]),
     (() => {
-      const copy = el("button", { className: "button button--secondary", type: "button", text: "Link kopiëren" });
+      const copy = el("button", { className: "button button--secondary", type: "button", text: "Copy link" });
       copy.addEventListener("click", async () => {
-        try { await copyText(shareUrl); showToast("Deelnemerslink gekopieerd", "success"); }
+        try { await copyText(shareUrl); showToast("Participant link copied", "success"); }
         catch (error) { showToast(errorMessage(error), "error"); }
       });
       return copy;
@@ -241,15 +241,15 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
   ]);
 
   const ticketSidebar = el("aside", { className: "panel facilitator-sidebar" }, [
-    el("div", { className: "section-heading section-heading--compact" }, [el("div", {}, [el("h2", { text: "Tickets" }), el("p", { className: "muted", text: model.tickets.length ? "Selecteer een ticket om te starten." : "Voeg het eerste ticket toe." })])]),
-    model.tickets.length ? renderTicketList(model, currentTicket, completed, activateTicket) : el("div", { className: "empty-state empty-state--compact", text: "Nog geen tickets." }),
+    el("div", { className: "section-heading section-heading--compact" }, [el("div", {}, [el("h2", { text: "Tickets" }), el("p", { className: "muted", text: model.tickets.length ? "Select a ticket to start." : "Add the first ticket." })])]),
+    model.tickets.length ? renderTicketList(model, currentTicket, completed, activateTicket) : el("div", { className: "empty-state empty-state--compact", text: "No tickets yet." }),
   ]);
 
   const focus = el("section", { className: "panel facilitator-focus" });
   if (!currentTicket) {
     focus.append(el("div", { className: "empty-state empty-state--compact" }, [
-      el("h2", { text: completed ? "Sessie afgerond" : "Geen actief ticket" }),
-      el("p", { text: completed ? "De sessie is read-only. Eerder opgeslagen schattingen blijven in de ticketlijst zichtbaar." : model.tickets.length ? "Kies een ticket uit de lijst om de stemronde te starten." : "Voeg hieronder een ticket toe." }),
+      el("h2", { text: completed ? "Session completed" : "No active ticket" }),
+      el("p", { text: completed ? "The session is read-only. Previously saved estimates remain visible in the ticket list." : model.tickets.length ? "Select a ticket from the list to start the voting round." : "Add a ticket below." }),
     ]));
   } else {
     const jiraUrl = safeJiraUrl(model.team?.jiraBaseUrl || session.team?.jiraBaseUrl, currentTicket.jiraIssueKey);
@@ -257,41 +257,41 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
       ? el("a", { className: "ticket-key", href: jiraUrl.toString(), target: "_blank", rel: "noopener noreferrer", text: currentTicket.jiraIssueKey || "Ticket" })
       : el("span", { className: "ticket-key", text: currentTicket.jiraIssueKey || "Ticket" });
     focus.append(
-      el("div", { className: "ticket-heading" }, [el("div", {}, [keyNode, el("h2", { text: currentTicket.summary || "Geen titel" })]), statusBadge(currentTicket.status)]),
-      currentTicket.description ? el("p", { className: "ticket-description", text: currentTicket.description }) : el("p", { className: "muted", text: "Geen omschrijving." }),
+      el("div", { className: "ticket-heading" }, [el("div", {}, [keyNode, el("h2", { text: currentTicket.summary || "No title" })]), statusBadge(currentTicket.status)]),
+      currentTicket.description ? el("p", { className: "ticket-description", text: currentTicket.description }) : el("p", { className: "muted", text: "No description." }),
       el("div", { className: "round-strip" }, [
-        el("span", { text: `Ronde ${roundNumber}` }),
-        el("strong", { text: `${currentVotes.length} van ${activeMembers.length} stemmen` }),
+        el("span", { text: `Round ${roundNumber}` }),
+        el("strong", { text: `${currentVotes.length} of ${activeMembers.length} votes` }),
       ]),
       participantList(model, currentVotes, Boolean(revealed)),
     );
     if (revealed) {
       const result = statsGrid(currentVotes, model.statistics, currentTicket.finalEstimateHours);
-      focus.append(el("div", { className: "results-block" }, [el("h3", { text: "Resultaten" }), result.grid]));
+      focus.append(el("div", { className: "results-block" }, [el("h3", { text: "Results" }), result.grid]));
 
       if (currentTicket.status !== "estimated" && !completed) {
         const estimateInput = el("input", { id: "final-estimate", type: "number", min: "0", max: "1000", step: "0.01", value: result.stats.median ?? "" });
         const estimateError = el("p", { className: "field-error" });
-        const chips = el("div", { className: "estimate-chips", role: "group", "aria-label": "Snelle schattingskeuzes" });
+        const chips = el("div", { className: "estimate-chips", role: "group", "aria-label": "Quick estimate choices" });
         VOTE_VALUES.forEach((value) => {
           const chip = el("button", { className: "chip", type: "button", text: String(value) });
           chip.addEventListener("click", () => { estimateInput.value = value; estimateInput.focus(); });
           chips.append(chip);
         });
-        const save = el("button", { className: "button button--primary", type: "button", text: "Schatting opslaan" });
+        const save = el("button", { className: "button button--primary", type: "button", text: "Save estimate" });
         save.addEventListener("click", async () => {
           estimateError.textContent = "";
           const raw = estimateInput.value.trim();
           const value = Number(raw.replace(",", "."));
-          if (!raw) { estimateError.textContent = "Vul een definitieve schatting in."; return; }
+          if (!raw) { estimateError.textContent = "Enter a final estimate."; return; }
           if (!/^\d+(?:[.,]\d{1,2})?$/.test(raw) || !Number.isFinite(value) || value < 0 || value > 1000) {
-            estimateError.textContent = "Gebruik een waarde van 0 t/m 1000 met maximaal twee decimalen.";
+            estimateError.textContent = "Use a value from 0 to 1000 with no more than two decimal places.";
             return;
           }
-          setBusy(save, true, "Opslaan…");
+          setBusy(save, true, "Saving…");
           try {
             await finalizeTicket(currentTicket.id, value);
-            showToast("Definitieve schatting opgeslagen", "success");
+            showToast("Final estimate saved", "success");
             await refresh(true);
           } catch (error) {
             showToast(errorMessage(error), "error");
@@ -299,7 +299,7 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
           }
         });
         focus.append(el("div", { className: "estimate-form" }, [
-          el("div", { className: "field" }, [el("label", { htmlFor: "final-estimate", text: "Definitieve schatting (uren)" }), estimateInput, estimateError]),
+          el("div", { className: "field" }, [el("label", { htmlFor: "final-estimate", text: "Final estimate (hours)" }), estimateInput, estimateError]),
           chips,
           save,
         ]));
@@ -310,16 +310,16 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
   const reveal = el("button", {
     className: "button button--primary",
     type: "button",
-    text: `Stemmen onthullen (${currentVotes.length})`,
+    text: `Reveal votes (${currentVotes.length})`,
     disabled: completed || !currentTicket || currentTicket.status !== "voting",
   });
   reveal.addEventListener("click", async () => {
     if (currentVotes.length < activeMembers.length
-      && !window.confirm(`${currentVotes.length} van ${activeMembers.length} deelnemers hebben gestemd. Toch onthullen?`)) return;
-    setBusy(reveal, true, "Onthullen…");
+      && !window.confirm(`${currentVotes.length} of ${activeMembers.length} participants have voted. Reveal anyway?`)) return;
+    setBusy(reveal, true, "Revealing…");
     try {
       await revealTicket(currentTicket.id, roundNumber);
-      showToast("Stemmen onthuld", "success");
+      showToast("Votes revealed", "success");
       await refresh(true);
     } catch (error) {
       showToast(errorMessage(error), "error");
@@ -328,16 +328,16 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
   });
 
   const newRound = el("button", {
-    className: "button button--secondary", type: "button", text: "Nieuwe ronde",
+    className: "button button--secondary", type: "button", text: "New round",
     disabled: completed || !currentTicket || !["revealed", "estimated"].includes(currentTicket.status),
   });
   newRound.addEventListener("click", async () => {
-    if (!window.confirm("Nieuwe stemronde starten? De stemmen uit de huidige ronde blijven bewaard als historie.")) return;
+    if (!window.confirm("Start a new voting round? Votes from the current round will be retained in the history.")) return;
     const nextRound = roundNumber + 1;
     try {
       setStoredValue(roundStorageKey(sessionId, currentTicket.id), nextRound, "sessionStorage");
       await update("estimationTickets", currentTicket.id, { status: "voting" });
-      showToast(`Ronde ${nextRound} gestart`, "success");
+      showToast(`Round ${nextRound} started`, "success");
       await refresh(true);
     } catch (error) {
       setStoredValue(roundStorageKey(sessionId, currentTicket.id), roundNumber, "sessionStorage");
@@ -347,21 +347,21 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
 
   const next = el("button", {
     className: "button button--secondary", type: "button",
-    text: nextTicket ? "Volgend open ticket" : "Alle tickets zijn geschat",
+    text: nextTicket ? "Next open ticket" : "All tickets are estimated",
     disabled: completed || !nextTicket,
   });
   next.addEventListener("click", () => activateTicket(nextTicket));
 
-  const finish = el("button", { className: "button button--danger", type: "button", text: "Sessie afronden", disabled: completed });
+  const finish = el("button", { className: "button button--danger", type: "button", text: "Complete session", disabled: completed });
   finish.addEventListener("click", async () => {
     const warning = openTickets.length
-      ? `Er zijn nog ${openTickets.length} openstaande tickets. Wilt u de sessie toch afronden?`
-      : "Wilt u deze sessie afronden? Daarna is stemmen niet meer mogelijk.";
+      ? `There are still ${openTickets.length} open tickets. Do you want to complete the session anyway?`
+      : "Do you want to complete this session? Voting will no longer be possible afterwards.";
     if (!window.confirm(warning)) return;
-    setBusy(finish, true, "Afronden…");
+    setBusy(finish, true, "Completing…");
     try {
       await update("estimationSessions", sessionId, { status: "completed", completedAt: new Date().toISOString(), currentTicketId: "" });
-      showToast("Sessie afgerond", "success");
+      showToast("Session completed", "success");
       await refresh(true);
     } catch (error) {
       showToast(errorMessage(error), "error");
@@ -369,15 +369,15 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
     }
   });
 
-  const actionBar = el("div", { className: "facilitator-actions", role: "group", "aria-label": "Facilitatoracties" }, [reveal, newRound, next, finish]);
+  const actionBar = el("div", { className: "facilitator-actions", role: "group", "aria-label": "Facilitator actions" }, [reveal, newRound, next, finish]);
   const ticketFormPanel = el("section", { className: "panel" }, [
-    el("div", { className: "section-heading section-heading--compact" }, [el("div", {}, [el("h2", { text: "Ticket toevoegen" }), el("p", { className: "muted", text: completed ? "Een afgeronde sessie is read-only." : "Voeg Jira-tickets handmatig toe." })])]),
+    el("div", { className: "section-heading section-heading--compact" }, [el("div", {}, [el("h2", { text: "Add ticket" }), el("p", { className: "muted", text: completed ? "A completed session is read-only." : "Add Jira tickets manually." })])]),
     addTicketForm(model, completed, refresh),
   ]);
 
   app.replaceChildren(
     heading,
-    completed ? el("div", { className: "completion-banner" }, [el("strong", { text: "Deze sessie is afgerond." }), el("span", { text: " Resultaten blijven zichtbaar; wijzigingen zijn uitgeschakeld." })]) : sharePanel,
+    completed ? el("div", { className: "completion-banner" }, [el("strong", { text: "This session is complete." }), el("span", { text: " Results remain visible; changes are disabled." })]) : sharePanel,
     el("div", { className: "facilitator-layout" }, [ticketSidebar, focus]),
     actionBar,
     ticketFormPanel,
@@ -386,16 +386,16 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
 
 export async function renderFacilitatorView({ app, route, isCurrent = () => true, refresh }) {
   const sessionId = route.params.sessionId;
-  document.title = "Faciliteren · Estimation Poker";
+  document.title = "Facilitate · Estimation Poker";
   if (!isApiConfigured()) {
-    renderErrorView({ app, title: "API nog niet geconfigureerd", error: new Error("Vul eerst apiUrl in site/js/config.js in.") });
+    renderErrorView({ app, title: "API not configured", error: new Error("Set apiUrl in site/js/config.js first.") });
     return;
   }
-  if (!app.hasChildNodes()) app.append(el("section", { className: "loading-state", role: "status" }, [el("span", { className: "spinner" }), el("p", { text: "Facilitatorscherm laden…" })]));
+  if (!app.hasChildNodes()) app.append(el("section", { className: "loading-state", role: "status" }, [el("span", { className: "spinner" }), el("p", { text: "Loading facilitator screen…" })]));
   try {
     const model = normalizeSessionState(await getSessionState(sessionId));
     if (!isCurrent()) return;
-    if (!model) throw new Error("De sessie is niet gevonden of de response is onvolledig.");
+    if (!model) throw new Error("The session was not found or the response is incomplete.");
     const activeMembers = model.members.filter(isActiveMember);
     const roleFacilitators = activeMembers.filter((member) => member.role === "facilitator");
     const eligibleFacilitators = roleFacilitators.length ? roleFacilitators : activeMembers;
@@ -422,9 +422,9 @@ export async function renderFacilitatorView({ app, route, isCurrent = () => true
   } catch (error) {
     if (!isCurrent()) return;
     if (app.querySelector(".facilitator-layout")) {
-      showToast(`Bijwerken mislukt: ${errorMessage(error)}`, "warning");
+      showToast(`Refresh failed: ${errorMessage(error)}`, "warning");
       return;
     }
-    renderErrorView({ app, title: "Facilitatorscherm kon niet worden geladen", error, retry: () => refresh(false) });
+    renderErrorView({ app, title: "The facilitator screen could not be loaded", error, retry: () => refresh(false) });
   }
 }

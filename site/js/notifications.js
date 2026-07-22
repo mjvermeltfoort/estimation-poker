@@ -21,7 +21,7 @@ export function showToast(message, type = "info") {
   const close = document.createElement("button");
   close.type = "button";
   close.className = "toast__close";
-  close.setAttribute("aria-label", "Melding sluiten");
+  close.setAttribute("aria-label", "Dismiss notification");
   close.textContent = "×";
   close.addEventListener("click", () => toast.remove());
   toast.append(text, close);

@@ -47,13 +47,13 @@ function renderMemberChooser(app, model, sessionId) {
   });
 
   app.replaceChildren(el("section", { className: "member-choice" }, [
-    el("p", { className: "eyebrow", text: "Deelnemen" }),
-    el("h1", { text: model.session.name || "Estimation-sessie" }),
-    el("p", { className: "lead", text: "Wie bent u? Deze keuze is alleen voor herkenning en is geen authenticatie." }),
+    el("p", { className: "eyebrow", text: "Join" }),
+    el("h1", { text: model.session.name || "Estimation session" }),
+    el("p", { className: "lead", text: "Who are you? This selection is only for identification and does not provide authentication." }),
     activeMembers.length
       ? grid
-      : el("div", { className: "empty-state empty-state--compact" }, [el("h2", { text: "Geen actieve teamleden" }), el("p", { text: "Vraag de facilitator om de teamconfiguratie te controleren." })]),
-    el("a", { className: "button button--ghost", href: "#/", text: "Terug naar start" }),
+      : el("div", { className: "empty-state empty-state--compact" }, [el("h2", { text: "No active team members" }), el("p", { text: "Ask the facilitator to check the team configuration." })]),
+    el("a", { className: "button button--ghost", href: "#/", text: "Back to home" }),
   ]));
 }
 
@@ -63,7 +63,7 @@ function renderParticipantStatus(model, currentVotes, revealed) {
     const vote = currentVotes.find((item) => String(item.teamMemberId) === String(member.id));
     const detail = revealed && vote
       ? formatHours(vote.estimateHours)
-      : vote ? "Gestemd" : "Nog niet gestemd";
+      : vote ? "Voted" : "Not voted yet";
     list.append(el("li", { className: "participant" }, [
       el("span", { className: "avatar avatar--small", text: String(member.displayName || "?").slice(0, 1).toUpperCase() }),
       el("span", { className: "participant__name", text: member.displayName || member.id }),
@@ -77,14 +77,14 @@ function renderStatistics(votes, suppliedStatistics, finalEstimateHours) {
   const stats = suppliedStatistics || calculateStatistics(votes);
   const grid = el("dl", { className: "stats-grid" });
   [
-    ["Stemmen", stats.count],
-    ["Gemiddelde", formatHours(stats.average)],
-    ["Mediaan", formatHours(stats.median)],
+    ["Votes", stats.count],
+    ["Average", formatHours(stats.average)],
+    ["Median", formatHours(stats.median)],
     ["Minimum", formatHours(stats.min)],
     ["Maximum", formatHours(stats.max)],
   ].forEach(([label, value]) => grid.append(el("div", {}, [el("dt", { text: label }), el("dd", { text: String(value ?? "—") })])));
   if (finalEstimateHours !== undefined && finalEstimateHours !== null && finalEstimateHours !== "") {
-    grid.append(el("div", { className: "stat-final" }, [el("dt", { text: "Definitief" }), el("dd", { text: formatHours(finalEstimateHours) })]));
+    grid.append(el("div", { className: "stat-final" }, [el("dt", { text: "Final" }), el("dd", { text: formatHours(finalEstimateHours) })]));
   }
   return grid;
 }
@@ -103,14 +103,14 @@ function renderSession(app, model, selectedMember, roundNumber, context) {
 
   const heading = el("div", { className: "page-heading" }, [
     el("div", {}, [
-      el("p", { className: "eyebrow", text: `Deelnemer · ${selectedMember.displayName || selectedMember.id}` }),
-      el("h1", { text: model.session.name || "Estimation-sessie" }),
-      el("div", { className: "meta-row" }, [statusBadge(model.session.status), el("span", { text: ticketIndex >= 0 ? `${ticketIndex + 1} van ${tickets.length}` : `${tickets.length} tickets` })]),
+      el("p", { className: "eyebrow", text: `Participant · ${selectedMember.displayName || selectedMember.id}` }),
+      el("h1", { text: model.session.name || "Estimation session" }),
+      el("div", { className: "meta-row" }, [statusBadge(model.session.status), el("span", { text: ticketIndex >= 0 ? `${ticketIndex + 1} of ${tickets.length}` : `${tickets.length} tickets` })]),
     ]),
     el("div", { className: "button-row" }, [
-      el("a", { className: "button button--ghost", href: "#/", text: "Startpagina" }),
+      el("a", { className: "button button--ghost", href: "#/", text: "Home" }),
       (() => {
-        const change = el("button", { className: "button button--secondary", type: "button", text: "Ander teamlid" });
+        const change = el("button", { className: "button button--secondary", type: "button", text: "Change team member" });
         change.addEventListener("click", () => {
           removeStoredValue(STORAGE_KEYS.selectedMemberId);
           navigateTo(`/session/${encodeURIComponent(sessionId)}`);
@@ -123,8 +123,8 @@ function renderSession(app, model, selectedMember, roundNumber, context) {
   const ticketPanel = el("section", { className: "panel ticket-focus" });
   if (!ticket) {
     ticketPanel.append(el("div", { className: "empty-state empty-state--compact" }, [
-      el("h2", { text: model.session.status === "completed" ? "Deze sessie is afgerond" : "Wachten op een ticket" }),
-      el("p", { text: model.session.status === "completed" ? "De definitieve schattingen staan hieronder." : "De facilitator selecteert het volgende ticket." }),
+      el("h2", { text: model.session.status === "completed" ? "This session is complete" : "Waiting for a ticket" }),
+      el("p", { text: model.session.status === "completed" ? "The final estimates are listed below." : "The facilitator will select the next ticket." }),
     ]));
     if (model.session.status === "completed" && tickets.length) {
       const results = el("div", { className: "completed-ticket-list" });
@@ -132,13 +132,13 @@ function renderSession(app, model, selectedMember, roundNumber, context) {
         results.append(el("div", { className: "completed-ticket" }, [
           el("div", {}, [
             el("strong", { text: completedTicket.jiraIssueKey || "Ticket" }),
-            el("span", { text: completedTicket.summary || "Geen titel" }),
+            el("span", { text: completedTicket.summary || "No title" }),
           ]),
           el("span", {
             className: "completed-ticket__estimate",
             text: completedTicket.finalEstimateHours !== undefined && completedTicket.finalEstimateHours !== null && completedTicket.finalEstimateHours !== ""
               ? formatHours(completedTicket.finalEstimateHours)
-              : "Niet geschat",
+              : "Not estimated",
           }),
         ]));
       });
@@ -150,16 +150,16 @@ function renderSession(app, model, selectedMember, roundNumber, context) {
       ? el("a", { className: "ticket-key", href: jiraUrl.toString(), target: "_blank", rel: "noopener noreferrer", text: ticket.jiraIssueKey || "Ticket" })
       : el("span", { className: "ticket-key", text: ticket.jiraIssueKey || "Ticket" });
     ticketPanel.append(
-      el("div", { className: "ticket-heading" }, [el("div", {}, [key, el("h2", { text: ticket.summary || "Geen titel" })]), statusBadge(ticket.status)]),
-      ticket.description ? el("p", { className: "ticket-description", text: ticket.description }) : el("p", { className: "muted", text: "Geen omschrijving." }),
+      el("div", { className: "ticket-heading" }, [el("div", {}, [key, el("h2", { text: ticket.summary || "No title" })]), statusBadge(ticket.status)]),
+      ticket.description ? el("p", { className: "ticket-description", text: ticket.description }) : el("p", { className: "muted", text: "No description." }),
     );
 
     if (canVote) {
       const voteIntro = el("div", { className: "section-heading section-heading--compact" }, [
-        el("div", {}, [el("h3", { text: ownVote ? "Uw schatting wijzigen" : "Kies uw schatting" }), el("p", { className: "muted", text: `Ronde ${roundNumber} · uren` })]),
-        ownVote ? el("span", { className: "saved-indicator", text: "Stem opgeslagen" }) : null,
+        el("div", {}, [el("h3", { text: ownVote ? "Change your estimate" : "Choose your estimate" }), el("p", { className: "muted", text: `Round ${roundNumber} · hours` })]),
+        ownVote ? el("span", { className: "saved-indicator", text: "Vote saved" }) : null,
       ]);
-      const cardGrid = el("div", { className: "vote-cards", role: "group", "aria-label": "Kies een schatting in uren" });
+      const cardGrid = el("div", { className: "vote-cards", role: "group", "aria-label": "Choose an estimate in hours" });
       const buttons = [];
       [...VOTE_VALUES, "?"].forEach((value) => {
         const selected = value !== "?" && Number(ownVote?.estimateHours) === Number(value);
@@ -168,13 +168,13 @@ function renderSession(app, model, selectedMember, roundNumber, context) {
           type: "button",
           text: String(value),
           "aria-pressed": selected ? "true" : "false",
-          "aria-label": value === "?" ? "Ticket moet worden verduidelijkt" : `${value} uur`,
+          "aria-label": value === "?" ? "Ticket needs clarification" : `${value} ${Number(value) === 1 ? "hour" : "hours"}`,
         });
         button.addEventListener("click", async () => {
           if (value === "?") {
             button.classList.add("vote-card--question");
             button.setAttribute("aria-pressed", "true");
-            showToast("Vraag om verduidelijking en kies daarna een numerieke waarde.", "warning");
+            showToast("Ask for clarification, then choose a numeric value.", "warning");
             window.setTimeout(() => { button.classList.remove("vote-card--question"); button.setAttribute("aria-pressed", "false"); }, 1600);
             return;
           }
@@ -188,7 +188,7 @@ function renderSession(app, model, selectedMember, roundNumber, context) {
               roundNumber,
               estimateHours: value,
             });
-            showToast("Stem opgeslagen", "success");
+            showToast("Vote saved", "success");
             await refresh(true);
           } catch (error) {
             showToast(errorMessage(error), "error");
@@ -200,12 +200,12 @@ function renderSession(app, model, selectedMember, roundNumber, context) {
       });
       ticketPanel.append(voteIntro, cardGrid);
     } else if (!revealed) {
-      ticketPanel.append(el("div", { className: "inline-info", text: model.session.status === "completed" ? "Deze sessie is afgerond; stemmen is gesloten." : "Stemmen is op dit moment gesloten." }));
+      ticketPanel.append(el("div", { className: "inline-info", text: model.session.status === "completed" ? "This session is complete; voting is closed." : "Voting is currently closed." }));
     }
 
     if (revealed) {
       ticketPanel.append(
-        el("div", { className: "section-heading section-heading--compact" }, [el("div", {}, [el("h3", { text: "Resultaten" }), el("p", { className: "muted", text: `Ronde ${roundNumber}` })])]),
+        el("div", { className: "section-heading section-heading--compact" }, [el("div", {}, [el("h3", { text: "Results" }), el("p", { className: "muted", text: `Round ${roundNumber}` })])]),
         renderStatistics(currentVotes, model.statistics, ticket.finalEstimateHours),
       );
     }
@@ -213,7 +213,7 @@ function renderSession(app, model, selectedMember, roundNumber, context) {
 
   const participantPanel = el("aside", { className: "panel" }, [
     el("div", { className: "section-heading section-heading--compact" }, [
-      el("div", {}, [el("h2", { text: "Deelnemers" }), el("p", { className: "muted", text: ticket ? `${currentVotes.length} van ${model.members.filter(isActiveMember).length} gestemd` : "Nog geen actief ticket" })]),
+      el("div", {}, [el("h2", { text: "Participants" }), el("p", { className: "muted", text: ticket ? `${currentVotes.length} of ${model.members.filter(isActiveMember).length} voted` : "No active ticket yet" })]),
       el("span", { className: "refresh-indicator", id: "refresh-status", "aria-live": "polite" }),
     ]),
     renderParticipantStatus(model, currentVotes, Boolean(revealed)),
@@ -224,16 +224,16 @@ function renderSession(app, model, selectedMember, roundNumber, context) {
 
 export async function renderSessionView({ app, route, isCurrent = () => true, refresh }) {
   const sessionId = route.params.sessionId;
-  document.title = "Sessie · Estimation Poker";
+  document.title = "Session · Estimation Poker";
   if (!isApiConfigured()) {
-    renderErrorView({ app, title: "API nog niet geconfigureerd", error: new Error("Vul eerst apiUrl in site/js/config.js in.") });
+    renderErrorView({ app, title: "API not configured", error: new Error("Set apiUrl in site/js/config.js first.") });
     return;
   }
-  if (!app.hasChildNodes()) app.append(el("section", { className: "loading-state", role: "status" }, [el("span", { className: "spinner" }), el("p", { text: "Sessie laden…" })]));
+  if (!app.hasChildNodes()) app.append(el("section", { className: "loading-state", role: "status" }, [el("span", { className: "spinner" }), el("p", { text: "Loading session…" })]));
   try {
     const model = normalizeSessionState(await getSessionState(sessionId));
     if (!isCurrent()) return;
-    if (!model) throw new Error("De sessie is niet gevonden of de response is onvolledig.");
+    if (!model) throw new Error("The session was not found or the response is incomplete.");
     const activeMembers = model.members.filter(isActiveMember);
     const requestedId = route.query.get("member");
     const storedId = getStoredValue(STORAGE_KEYS.selectedMemberId, null);
@@ -260,9 +260,9 @@ export async function renderSessionView({ app, route, isCurrent = () => true, re
   } catch (error) {
     if (!isCurrent()) return;
     if (app.querySelector(".session-layout")) {
-      showToast(`Bijwerken mislukt: ${errorMessage(error)}`, "warning");
+      showToast(`Refresh failed: ${errorMessage(error)}`, "warning");
       return;
     }
-    renderErrorView({ app, title: "Sessie kon niet worden geladen", error, retry: () => refresh(false) });
+    renderErrorView({ app, title: "The session could not be loaded", error, retry: () => refresh(false) });
   }
 }

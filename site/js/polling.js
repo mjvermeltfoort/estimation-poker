@@ -27,7 +27,7 @@ export function startPolling(refresh) {
     try {
       await refresh();
     } catch (error) {
-      console.warn("Achtergrondverversing mislukt; later wordt opnieuw geprobeerd.", error);
+      console.warn("Background refresh failed; another attempt will be made later.", error);
     } finally {
       schedule();
     }

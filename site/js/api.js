@@ -13,7 +13,7 @@ export class ApiError extends Error {
 function configuredUrl() {
   if (!isApiConfigured()) {
     throw new ApiError(
-      "De Google Apps Script API is nog niet geconfigureerd.",
+      "The Google Apps Script API has not been configured yet.",
       "NOT_CONFIGURED",
     );
   }
@@ -21,7 +21,7 @@ function configuredUrl() {
   try {
     return new URL(CONFIG.apiUrl);
   } catch (error) {
-    throw new ApiError("De geconfigureerde API-URL is ongeldig.", "INVALID_CONFIG", 0, error);
+    throw new ApiError("The configured API URL is invalid.", "INVALID_CONFIG", 0, error);
   }
 }
 
@@ -40,17 +40,17 @@ async function parseResponse(response) {
   try {
     const text = await response.text();
     if (!text.trim()) {
-      throw new ApiError("De server stuurde een lege response.", "EMPTY_RESPONSE", response.status);
+      throw new ApiError("The server returned an empty response.", "EMPTY_RESPONSE", response.status);
     }
     payload = JSON.parse(text);
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    throw new ApiError("De server stuurde geen geldige JSON.", "INVALID_JSON", response.status, error);
+    throw new ApiError("The server did not return valid JSON.", "INVALID_JSON", response.status, error);
   }
 
   if (!response.ok) {
     throw new ApiError(
-      payload?.error?.message || payload?.message || `De server antwoordde met status ${response.status}.`,
+      payload?.error?.message || payload?.message || `The server responded with status ${response.status}.`,
       payload?.error?.code || "HTTP_ERROR",
       response.status,
       payload?.error?.details || payload,
@@ -58,18 +58,18 @@ async function parseResponse(response) {
   }
 
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new ApiError("De serverresponse heeft een onverwacht formaat.", "INVALID_RESPONSE", response.status);
+    throw new ApiError("The server response has an unexpected format.", "INVALID_RESPONSE", response.status);
   }
   if (payload.ok === false) {
     throw new ApiError(
-      payload.error?.message || payload.message || "De bewerking is door de server geweigerd.",
+      payload.error?.message || payload.message || "The server rejected the operation.",
       payload.error?.code || payload.code || "API_ERROR",
       response.status,
       payload.error?.details || payload.details || null,
     );
   }
   if (payload.ok !== true || !("data" in payload)) {
-    throw new ApiError("De serverresponse mist verplichte velden.", "INVALID_RESPONSE", response.status, payload);
+    throw new ApiError("The server response is missing required fields.", "INVALID_RESPONSE", response.status, payload);
   }
   return payload.data;
 }
@@ -91,13 +91,13 @@ async function request({ method = "GET", params = {}, payload = null }) {
     return await parseResponse(response);
   } catch (error) {
     if (error instanceof ApiError) {
-      console.error("API-fout", error);
+      console.error("API error", error);
       throw error;
     }
     const apiError = error?.name === "AbortError"
-      ? new ApiError("De aanvraag duurde te lang. Probeer het opnieuw.", "TIMEOUT")
-      : new ApiError("Geen verbinding met de API. Controleer uw netwerk en de Apps Script-publicatie.", "NETWORK_ERROR", 0, error);
-    console.error("API-fout", apiError);
+      ? new ApiError("The request timed out. Please try again.", "TIMEOUT")
+      : new ApiError("Could not connect to the API. Check your network connection and the Apps Script deployment.", "NETWORK_ERROR", 0, error);
+    console.error("API error", apiError);
     throw apiError;
   } finally {
     window.clearTimeout(timeoutId);

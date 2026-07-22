@@ -38,8 +38,8 @@ function createSheet(rows) {
 const sheets = {
   Teams: createSheet([
     ["id", "name", "jiraBaseUrl", "jiraProjectKey", "createdAt", "active"],
-    ["team-1", "Team één", "https://jira.example.test", "TEAM", "2026-01-01T00:00:00.000Z", true],
-    ["team-2", "Team twee", "", "", "2026-01-01T00:00:00.000Z", true],
+    ["team-1", "Team one", "https://jira.example.test", "TEAM", "2026-01-01T00:00:00.000Z", true],
+    ["team-2", "Team two", "", "", "2026-01-01T00:00:00.000Z", true],
   ]),
   TeamMembers: createSheet([
     ["id", "teamId", "displayName", "email", "role", "active", "createdAt"],
@@ -52,7 +52,7 @@ const sheets = {
   ]),
   EstimationTickets: createSheet([
     ["id", "sessionId", "jiraIssueKey", "summary", "description", "status", "sortOrder", "finalEstimateHours", "createdAt"],
-    ["ticket-1", "session-1", "TEAM-1", "Veilig stemmen", "", "voting", 1, "", "2026-01-01T00:00:00.000Z"],
+    ["ticket-1", "session-1", "TEAM-1", "Secure voting", "", "voting", 1, "", "2026-01-01T00:00:00.000Z"],
   ]),
   Votes: createSheet([
     ["id", "sessionId", "ticketId", "teamMemberId", "roundNumber", "estimateHours", "createdAt"],
@@ -95,7 +95,7 @@ globalThis.ContentService = {
 const [loaded, contents] = GLib.file_get_contents(
   GLib.build_filenamev([GLib.get_current_dir(), "resources", "Code.gs"]),
 );
-assert(loaded, "Code.gs kon niet worden geladen.");
+assert(loaded, "Code.gs could not be loaded.");
 const source = new TextDecoder().decode(contents);
 const backend = eval(`${source}\n({ handleRequest: handleRequest_ });`);
 
@@ -106,15 +106,15 @@ function request(method, parameter = {}, body = null) {
 }
 
 const health = request("GET", { action: "health" });
-assert(health.ok === true && health.data.apiVersion === "v1", "Healthresponse voldoet niet aan het frontendcontract.");
+assert(health.ok === true && health.data.apiVersion === "v1", "Health response does not satisfy the frontend contract.");
 
 const protectedVotes = request("GET", { action: "list", entity: "votes" });
-assert(protectedVotes.ok === false && protectedVotes.error.code === "PROTECTED_ENTITY", "Stemmen zijn generiek uitleesbaar.");
+assert(protectedVotes.ok === false && protectedVotes.error.code === "PROTECTED_ENTITY", "Votes can be read through the generic endpoint.");
 
 let state = request("GET", { action: "sessionState", sessionId: "session-1" });
-assert(state.ok === true && state.data.team.id === "team-1", "Sessiestatus mist teamgegevens.");
-assert(state.data.votes.length === 1 && state.data.votes[0].hasVoted === true, "Verborgen stemstatus ontbreekt.");
-assert(!("estimateHours" in state.data.votes[0]), "Een stemwaarde lekt vóór reveal.");
+assert(state.ok === true && state.data.team.id === "team-1", "Session state is missing team data.");
+assert(state.data.votes.length === 1 && state.data.votes[0].hasVoted === true, "Hidden vote status is missing.");
+assert(!("estimateHours" in state.data.votes[0]), "A vote value leaks before reveal.");
 
 const invalidMemberVote = request("POST", {}, {
   action: "submitVote",
@@ -124,18 +124,18 @@ const invalidMemberVote = request("POST", {}, {
   roundNumber: 1,
   estimateHours: 8,
 });
-assert(invalidMemberVote.ok === false && invalidMemberVote.error.code === "MEMBER_NOT_ELIGIBLE", "Een lid van een ander team kan stemmen.");
+assert(invalidMemberVote.ok === false && invalidMemberVote.error.code === "MEMBER_NOT_ELIGIBLE", "A member of another team can vote.");
 
 const revealed = request("POST", {}, {
   action: "revealTicket",
   ticketId: "ticket-1",
   roundNumber: 1,
 });
-assert(revealed.ok === true && revealed.data.votes[0].estimateHours === 8, "Reveal geeft de stemwaarde niet vrij.");
-assert(revealed.data.statistics.median === 8, "Reveal-statistieken zijn onjuist.");
+assert(revealed.ok === true && revealed.data.votes[0].estimateHours === 8, "Reveal does not expose the vote value.");
+assert(revealed.data.statistics.median === 8, "Reveal statistics are incorrect.");
 
 state = request("GET", { action: "sessionState", sessionId: "session-1" });
-assert(state.data.votes[0].estimateHours === 8, "Een onthulde stem wordt ten onrechte verborgen.");
+assert(state.data.votes[0].estimateHours === 8, "A revealed vote is incorrectly hidden.");
 
 const newRound = request("POST", {}, {
   action: "update",
@@ -143,11 +143,11 @@ const newRound = request("POST", {}, {
   id: "ticket-1",
   data: { status: "voting" },
 });
-assert(newRound.ok === true, "Een nieuwe ronde kon niet worden gestart.");
+assert(newRound.ok === true, "A new round could not be started.");
 
 state = request("GET", { action: "sessionState", sessionId: "session-1" });
-assert(state.data.currentRoundNumber === 2, "Het backend-rondenummer is niet verhoogd.");
-assert(state.data.votes.length === 0, "Stemmen uit een vorige ronde verschijnen in de nieuwe ronde.");
+assert(state.data.currentRoundNumber === 2, "The backend round number was not incremented.");
+assert(state.data.votes.length === 0, "Votes from a previous round appear in the new round.");
 
 const staleVote = request("POST", {}, {
   action: "submitVote",
@@ -157,7 +157,7 @@ const staleVote = request("POST", {}, {
   roundNumber: 1,
   estimateHours: 8,
 });
-assert(staleVote.ok === false && staleVote.error.code === "ROUND_MISMATCH", "Een stem voor een verouderde ronde is geaccepteerd.");
+assert(staleVote.ok === false && staleVote.error.code === "ROUND_MISMATCH", "A vote for a stale round was accepted.");
 
 const currentVote = request("POST", {}, {
   action: "submitVote",
@@ -167,27 +167,27 @@ const currentVote = request("POST", {}, {
   roundNumber: 2,
   estimateHours: 12,
 });
-assert(currentVote.ok === true && currentVote.data.hasVoted === true, "Een geldige stem is geweigerd.");
+assert(currentVote.ok === true && currentVote.data.hasVoted === true, "A valid vote was rejected.");
 
 state = request("GET", { action: "sessionState", sessionId: "session-1" });
-assert(state.data.votes.length === 1 && !("estimateHours" in state.data.votes[0]), "De nieuwe stem lekt vóór reveal.");
+assert(state.data.votes.length === 1 && !("estimateHours" in state.data.votes[0]), "The new vote leaks before reveal.");
 
 const secondReveal = request("POST", {}, {
   action: "revealTicket",
   ticketId: "ticket-1",
   roundNumber: 2,
 });
-assert(secondReveal.ok === true, "De tweede ronde kon niet worden onthuld.");
+assert(secondReveal.ok === true, "The second round could not be revealed.");
 
 const finalized = request("POST", {}, {
   action: "finalizeTicket",
   ticketId: "ticket-1",
   finalEstimateHours: 12,
 });
-assert(finalized.ok === true && finalized.data.status === "estimated", "De definitieve schatting kon niet worden opgeslagen.");
+assert(finalized.ok === true && finalized.data.status === "estimated", "The final estimate could not be saved.");
 
 state = request("GET", { action: "sessionState", sessionId: "session-1" });
-assert(state.data.votes[0].estimateHours === 12, "Stemmen verdwijnen nadat een ticket definitief is geschat.");
-assert(state.data.statistics.median === 12, "Definitieve sessiestatistieken zijn onjuist.");
+assert(state.data.votes[0].estimateHours === 12, "Votes disappear after a ticket receives a final estimate.");
+assert(state.data.statistics.median === 12, "Final session statistics are incorrect.");
 
-print("Code.gs-smoketests geslaagd");
+print("Code.gs smoke tests passed");

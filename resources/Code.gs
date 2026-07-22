@@ -157,7 +157,7 @@ function handleRequest_(method, e) {
         }));
 
       default:
-        throw new ApiError_('UNKNOWN_ACTION', 'Onbekende action: ' + action, 400);
+        throw new ApiError_('UNKNOWN_ACTION', 'Unknown action: ' + action, 400);
     }
   } catch (error) {
     const isApiError = error && error.name === 'ApiError';
@@ -169,7 +169,7 @@ function handleRequest_(method, e) {
       ok: false,
       error: {
         code: isApiError ? error.code : 'INTERNAL_ERROR',
-        message: isApiError ? error.message : 'Er is een interne serverfout opgetreden.',
+        message: isApiError ? error.message : 'An internal server error occurred.',
         status: isApiError ? error.status : 500
       }
     });
@@ -184,7 +184,7 @@ function listEntities_(entityName, filters) {
   Object.keys(filters || {}).forEach(function(key) {
     if (reserved.indexOf(key) !== -1 || filters[key] === '') return;
     if (config.fields.indexOf(key) === -1) {
-      throw new ApiError_('INVALID_FILTER', 'Onbekend filterveld: ' + key, 400);
+      throw new ApiError_('INVALID_FILTER', 'Unknown filter field: ' + key, 400);
     }
     rows = rows.filter(function(row) {
       return String(row[key]) === String(filters[key]);
@@ -211,7 +211,7 @@ function getEntity_(entityName, id) {
   const record = findById_(config.sheetName, normalizedId);
 
   if (!record) {
-    throw new ApiError_('NOT_FOUND', entityName + ' niet gevonden', 404);
+    throw new ApiError_('NOT_FOUND', entityName + ' not found', 404);
   }
 
   return { ok: true, data: record };
@@ -247,12 +247,12 @@ function updateEntity_(entityName, id, patch) {
   assertAllowedKeys_(patch, config.updateFields, 'data');
 
   if (!Object.keys(patch).length) {
-    throw new ApiError_('VALIDATION_ERROR', 'De update bevat geen velden', 400);
+    throw new ApiError_('VALIDATION_ERROR', 'The update contains no fields', 400);
   }
 
   const current = findById_(config.sheetName, normalizedId);
   if (!current) {
-    throw new ApiError_('NOT_FOUND', entityName + ' niet gevonden', 404);
+    throw new ApiError_('NOT_FOUND', entityName + ' not found', 404);
   }
 
   const safePatch = copyObject_(patch);
@@ -278,7 +278,7 @@ function deleteEntity_(entityName, id) {
   const current = findById_(config.sheetName, normalizedId);
 
   if (!current) {
-    throw new ApiError_('NOT_FOUND', entityName + ' niet gevonden', 404);
+    throw new ApiError_('NOT_FOUND', entityName + ' not found', 404);
   }
 
   assertNoDependencies_(entityName, current);
@@ -292,12 +292,12 @@ function getSessionState_(sessionId) {
   const normalizedSessionId = requiredString_(sessionId, 'sessionId', 200);
   const session = findById_('EstimationSessions', normalizedSessionId);
   if (!session) {
-    throw new ApiError_('SESSION_NOT_FOUND', 'Sessie niet gevonden', 404);
+    throw new ApiError_('SESSION_NOT_FOUND', 'Session not found', 404);
   }
 
   const team = findById_('Teams', session.teamId);
   if (!team) {
-    throw new ApiError_('INVALID_DATA', 'Het team van deze sessie bestaat niet meer', 409);
+    throw new ApiError_('INVALID_DATA', 'The team for this session no longer exists', 409);
   }
 
   const members = readRows_('TeamMembers').filter(function(row) {
@@ -373,26 +373,26 @@ function submitVote_(body) {
 
   const session = findById_('EstimationSessions', sessionId);
   if (!session) {
-    throw new ApiError_('SESSION_NOT_FOUND', 'Sessie niet gevonden', 404);
+    throw new ApiError_('SESSION_NOT_FOUND', 'Session not found', 404);
   }
   if (['completed', 'cancelled'].indexOf(session.status) !== -1) {
-    throw new ApiError_('VOTING_CLOSED', 'Stemmen in deze sessie is gesloten', 409);
+    throw new ApiError_('VOTING_CLOSED', 'Voting in this session is closed', 409);
   }
   if (!sameId_(session.currentTicketId, ticketId)) {
-    throw new ApiError_('TICKET_NOT_ACTIVE', 'Dit ticket is niet het actieve ticket', 409);
+    throw new ApiError_('TICKET_NOT_ACTIVE', 'This ticket is not the active ticket', 409);
   }
 
   const ticket = findById_('EstimationTickets', ticketId);
   if (!ticket || !sameId_(ticket.sessionId, sessionId)) {
-    throw new ApiError_('TICKET_NOT_FOUND', 'Ticket niet gevonden in sessie', 404);
+    throw new ApiError_('TICKET_NOT_FOUND', 'Ticket not found in session', 404);
   }
   if (['pending', 'voting'].indexOf(ticket.status) === -1) {
-    throw new ApiError_('VOTING_CLOSED', 'Stemmen voor dit ticket is gesloten', 409);
+    throw new ApiError_('VOTING_CLOSED', 'Voting for this ticket is closed', 409);
   }
 
   const member = findById_('TeamMembers', memberId);
   if (!member || !sameId_(member.teamId, session.teamId) || !toBoolean_(member.active)) {
-    throw new ApiError_('MEMBER_NOT_ELIGIBLE', 'Dit teamlid mag niet stemmen in deze sessie', 403);
+    throw new ApiError_('MEMBER_NOT_ELIGIBLE', 'This team member may not vote in this session', 403);
   }
 
   const votes = readRows_('Votes');
@@ -403,7 +403,7 @@ function submitVote_(body) {
   if (roundNumber !== expectedRound) {
     throw new ApiError_(
       'ROUND_MISMATCH',
-      'De stemronde is gewijzigd; ververs de sessie en probeer opnieuw.',
+      'The voting round has changed; refresh the session and try again.',
       409
     );
   }
@@ -450,18 +450,18 @@ function revealTicket_(body) {
   const ticket = findById_('EstimationTickets', ticketId);
 
   if (!ticket) {
-    throw new ApiError_('TICKET_NOT_FOUND', 'Ticket niet gevonden', 404);
+    throw new ApiError_('TICKET_NOT_FOUND', 'Ticket not found', 404);
   }
 
   const session = findById_('EstimationSessions', ticket.sessionId);
   if (!session || !sameId_(session.currentTicketId, ticketId)) {
-    throw new ApiError_('TICKET_NOT_ACTIVE', 'Dit ticket is niet het actieve ticket', 409);
+    throw new ApiError_('TICKET_NOT_ACTIVE', 'This ticket is not the active ticket', 409);
   }
   if (['completed', 'cancelled'].indexOf(session.status) !== -1) {
-    throw new ApiError_('SESSION_CLOSED', 'Deze sessie is gesloten', 409);
+    throw new ApiError_('SESSION_CLOSED', 'This session is closed', 409);
   }
   if (ticket.status !== 'voting') {
-    throw new ApiError_('INVALID_TICKET_STATUS', 'Alleen een actieve stemronde kan worden onthuld', 409);
+    throw new ApiError_('INVALID_TICKET_STATUS', 'Only an active voting round can be revealed', 409);
   }
 
   const votes = readRows_('Votes').filter(function(vote) {
@@ -469,7 +469,7 @@ function revealTicket_(body) {
   });
   const expectedRound = getCurrentRound_(ticketId, votes);
   if (roundNumber !== expectedRound) {
-    throw new ApiError_('ROUND_MISMATCH', 'De stemronde is gewijzigd; ververs de sessie.', 409);
+    throw new ApiError_('ROUND_MISMATCH', 'The voting round has changed; refresh the session.', 409);
   }
 
   const roundVotes = votes.filter(function(vote) {
@@ -503,22 +503,22 @@ function finalizeTicket_(body) {
   const ticket = findById_('EstimationTickets', ticketId);
 
   if (!ticket) {
-    throw new ApiError_('TICKET_NOT_FOUND', 'Ticket niet gevonden', 404);
+    throw new ApiError_('TICKET_NOT_FOUND', 'Ticket not found', 404);
   }
   if (ticket.status !== 'revealed') {
     throw new ApiError_(
       'INVALID_TICKET_STATUS',
-      'Onthul de stemmen voordat de definitieve schatting wordt opgeslagen.',
+      'Reveal the votes before saving the final estimate.',
       409
     );
   }
 
   const session = findById_('EstimationSessions', ticket.sessionId);
   if (!session || !sameId_(session.currentTicketId, ticketId)) {
-    throw new ApiError_('TICKET_NOT_ACTIVE', 'Dit ticket is niet het actieve ticket', 409);
+    throw new ApiError_('TICKET_NOT_ACTIVE', 'This ticket is not the active ticket', 409);
   }
   if (['completed', 'cancelled'].indexOf(session.status) !== -1) {
-    throw new ApiError_('SESSION_CLOSED', 'Deze sessie is gesloten', 409);
+    throw new ApiError_('SESSION_CLOSED', 'This session is closed', 409);
   }
 
   const updatedTicket = updateRecord_('EstimationTickets', ticketId, {
@@ -536,7 +536,7 @@ function prepareUpdate_(entityName, current, patch) {
 
     const nextStatus = patch.status === undefined ? current.status : cleanString_(patch.status, 30);
     if (['completed', 'cancelled'].indexOf(current.status) !== -1 && nextStatus !== current.status) {
-      throw new ApiError_('SESSION_CLOSED', 'Een gesloten sessie kan niet opnieuw worden geopend', 409);
+      throw new ApiError_('SESSION_CLOSED', 'A closed session cannot be reopened', 409);
     }
     if (nextStatus === 'active' && !current.startedAt) patch.startedAt = nowIso_();
     if (nextStatus === 'completed') {
@@ -550,7 +550,7 @@ function prepareUpdate_(entityName, current, patch) {
     if (['revealed', 'estimated'].indexOf(nextStatus) !== -1) {
       throw new ApiError_(
         'USE_DEDICATED_ACTION',
-        'Gebruik revealTicket of finalizeTicket voor deze statuswijziging',
+        'Use revealTicket or finalizeTicket for this status change',
         400
       );
     }
@@ -558,10 +558,10 @@ function prepareUpdate_(entityName, current, patch) {
     if (nextStatus === 'voting') {
       const session = findById_('EstimationSessions', current.sessionId);
       if (!session || !sameId_(session.currentTicketId, current.id)) {
-        throw new ApiError_('TICKET_NOT_ACTIVE', 'Activeer dit ticket eerst in de sessie', 409);
+        throw new ApiError_('TICKET_NOT_ACTIVE', 'Activate this ticket in the session first', 409);
       }
       if (['completed', 'cancelled'].indexOf(session.status) !== -1) {
-        throw new ApiError_('SESSION_CLOSED', 'Deze sessie is gesloten', 409);
+        throw new ApiError_('SESSION_CLOSED', 'This session is closed', 409);
       }
 
       const votes = readRows_('Votes').filter(function(vote) {
@@ -595,7 +595,7 @@ function normalizeAndValidateEntity_(entityName, record, current) {
       record.role = optionalString_(record.role, 'role', 50) || 'member';
       record.active = parseBoolean_(record.active, 'active', true);
       assertOneOf_(record.role, MEMBER_ROLES, 'role');
-      assertRecordExists_('Teams', record.teamId, 'TEAM_NOT_FOUND', 'Team niet gevonden');
+      assertRecordExists_('Teams', record.teamId, 'TEAM_NOT_FOUND', 'Team not found');
       break;
 
     case 'estimationSessions':
@@ -620,21 +620,21 @@ function normalizeAndValidateEntity_(entityName, record, current) {
       break;
 
     default:
-      throw new ApiError_('UNKNOWN_ENTITY', 'Onbekende entity: ' + entityName, 400);
+      throw new ApiError_('UNKNOWN_ENTITY', 'Unknown entity: ' + entityName, 400);
   }
 }
 
 function validateSessionRelations_(session, current) {
   const team = findById_('Teams', session.teamId);
   if (!team) {
-    throw new ApiError_('TEAM_NOT_FOUND', 'Team niet gevonden', 404);
+    throw new ApiError_('TEAM_NOT_FOUND', 'Team not found', 404);
   }
 
   const creator = findById_('TeamMembers', session.createdByMemberId);
   if (!creator || !sameId_(creator.teamId, session.teamId) || (!current && !toBoolean_(creator.active))) {
     throw new ApiError_(
       'INVALID_FACILITATOR',
-      'De gekozen facilitator is geen actief lid van dit team',
+      'The selected facilitator is not an active member of this team',
       400
     );
   }
@@ -644,7 +644,7 @@ function validateSessionRelations_(session, current) {
     if (!ticket || !sameId_(ticket.sessionId, session.id)) {
       throw new ApiError_(
         'INVALID_CURRENT_TICKET',
-        'Het actieve ticket hoort niet bij deze sessie',
+        'The active ticket does not belong to this session',
         400
       );
     }
@@ -654,10 +654,10 @@ function validateSessionRelations_(session, current) {
 function validateTicketRelations_(ticket, current) {
   const session = findById_('EstimationSessions', ticket.sessionId);
   if (!session) {
-    throw new ApiError_('SESSION_NOT_FOUND', 'Sessie niet gevonden', 404);
+    throw new ApiError_('SESSION_NOT_FOUND', 'Session not found', 404);
   }
   if (['completed', 'cancelled'].indexOf(session.status) !== -1) {
-    throw new ApiError_('SESSION_CLOSED', 'Tickets in een gesloten sessie kunnen niet worden gewijzigd', 409);
+    throw new ApiError_('SESSION_CLOSED', 'Tickets in a closed session cannot be changed', 409);
   }
 
   const duplicate = readRows_('EstimationTickets').find(function(other) {
@@ -666,7 +666,7 @@ function validateTicketRelations_(ticket, current) {
       String(other.jiraIssueKey || '').trim().toUpperCase() === ticket.jiraIssueKey;
   });
   if (duplicate) {
-    throw new ApiError_('DUPLICATE_TICKET', 'Deze Jira-key staat al in de sessie', 409);
+    throw new ApiError_('DUPLICATE_TICKET', 'This Jira key is already in the session', 409);
   }
 }
 
@@ -705,7 +705,7 @@ function assertNoDependencies_(entityName, record) {
   if (hasDependencies) {
     throw new ApiError_(
       'ENTITY_IN_USE',
-      'Dit record kan niet worden verwijderd omdat er gekoppelde gegevens bestaan',
+      'This record cannot be deleted because related data exists',
       409
     );
   }
@@ -903,7 +903,7 @@ function getSheetData_(sheetName) {
   const lastRow = sheet.getLastRow();
 
   if (lastColumn < 1 || lastRow < 1) {
-    throw new ApiError_('INVALID_SHEET', 'Tabblad heeft geen kopregel: ' + sheetName, 500);
+    throw new ApiError_('INVALID_SHEET', 'Sheet has no header row: ' + sheetName, 500);
   }
 
   const values = sheet.getRange(1, 1, lastRow, lastColumn).getValues();
@@ -919,17 +919,17 @@ function validateHeaders_(sheetName, headers, requiredHeaders) {
   const seen = {};
   headers.forEach(function(header) {
     if (!header) {
-      throw new ApiError_('INVALID_SHEET', 'Lege kolomnaam in ' + sheetName, 500);
+      throw new ApiError_('INVALID_SHEET', 'Empty column name in ' + sheetName, 500);
     }
     if (seen[header]) {
-      throw new ApiError_('INVALID_SHEET', 'Dubbele kolomnaam in ' + sheetName + ': ' + header, 500);
+      throw new ApiError_('INVALID_SHEET', 'Duplicate column name in ' + sheetName + ': ' + header, 500);
     }
     seen[header] = true;
   });
 
   requiredHeaders.forEach(function(header) {
     if (!seen[header]) {
-      throw new ApiError_('INVALID_SHEET', 'Kolom ontbreekt in ' + sheetName + ': ' + header, 500);
+      throw new ApiError_('INVALID_SHEET', 'Missing column in ' + sheetName + ': ' + header, 500);
     }
   });
 }
@@ -945,11 +945,11 @@ function rowToRecord_(headers, row) {
 function getSheet_(sheetName) {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   if (!spreadsheet) {
-    throw new ApiError_('SPREADSHEET_NOT_FOUND', 'Geen actieve spreadsheet gevonden', 500);
+    throw new ApiError_('SPREADSHEET_NOT_FOUND', 'No active spreadsheet found', 500);
   }
   const sheet = spreadsheet.getSheetByName(sheetName);
   if (!sheet) {
-    throw new ApiError_('SHEET_NOT_FOUND', 'Tabblad ontbreekt: ' + sheetName, 500);
+    throw new ApiError_('SHEET_NOT_FOUND', 'Missing sheet: ' + sheetName, 500);
   }
   return sheet;
 }
@@ -959,7 +959,7 @@ function getPublicEntityConfig_(entityName) {
   if (normalizedName === 'votes') {
     throw new ApiError_(
       'PROTECTED_ENTITY',
-      'Stemmen zijn alleen beschikbaar via de stem- en sessieacties',
+      'Votes are only available through the voting and session actions',
       403
     );
   }
@@ -968,7 +968,7 @@ function getPublicEntityConfig_(entityName) {
 
 function getEntityConfig_(entityName) {
   if (!Object.prototype.hasOwnProperty.call(SHEETS, entityName)) {
-    throw new ApiError_('UNKNOWN_ENTITY', 'Onbekende entity: ' + entityName, 400);
+    throw new ApiError_('UNKNOWN_ENTITY', 'Unknown entity: ' + entityName, 400);
   }
   return SHEETS[entityName];
 }
@@ -978,7 +978,7 @@ function getEntityConfigBySheetName_(sheetName) {
     return SHEETS[name].sheetName === sheetName;
   });
   if (!entityName) {
-    throw new ApiError_('UNKNOWN_SHEET', 'Onbekend tabblad: ' + sheetName, 500);
+    throw new ApiError_('UNKNOWN_SHEET', 'Unknown sheet: ' + sheetName, 500);
   }
   return SHEETS[entityName];
 }
@@ -992,14 +992,14 @@ function parseBody_(e) {
     return body;
   } catch (error) {
     if (error && error.name === 'ApiError') throw error;
-    throw new ApiError_('INVALID_JSON', 'Ongeldige JSON-body', 400);
+    throw new ApiError_('INVALID_JSON', 'Invalid JSON body', 400);
   }
 }
 
 function withScriptLock_(callback) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_TIMEOUT_MS)) {
-    throw new ApiError_('API_BUSY', 'De API is bezig; probeer het zo opnieuw.', 503);
+    throw new ApiError_('API_BUSY', 'The API is busy; try again shortly.', 503);
   }
 
   try {
@@ -1017,20 +1017,20 @@ function validateRequired_(fields, data) {
 
 function assertValue_(value, name) {
   if (value === undefined || value === null || String(value).trim() === '') {
-    throw new ApiError_('VALIDATION_ERROR', name + ' is verplicht', 400);
+    throw new ApiError_('VALIDATION_ERROR', name + ' is required', 400);
   }
 }
 
 function assertPlainObject_(value, name) {
   if (!value || Object.prototype.toString.call(value) !== '[object Object]') {
-    throw new ApiError_('VALIDATION_ERROR', name + ' moet een object zijn', 400);
+    throw new ApiError_('VALIDATION_ERROR', name + ' must be an object', 400);
   }
 }
 
 function assertAllowedKeys_(value, allowedKeys, name) {
   Object.keys(value).forEach(function(key) {
     if (allowedKeys.indexOf(key) === -1) {
-      throw new ApiError_('VALIDATION_ERROR', name + ' bevat een onbekend veld: ' + key, 400);
+      throw new ApiError_('VALIDATION_ERROR', name + ' contains an unknown field: ' + key, 400);
     }
   });
 }
@@ -1056,7 +1056,7 @@ function cleanStringWithLimit_(value, name, maxLength) {
   if (result.length > maxLength) {
     throw new ApiError_(
       'VALIDATION_ERROR',
-      name + ' mag maximaal ' + maxLength + ' tekens bevatten',
+      name + ' may contain no more than ' + maxLength + ' characters',
       400
     );
   }
@@ -1068,7 +1068,7 @@ function parseBoolean_(value, name, defaultValue) {
   if (value === true || value === false) return value;
   if (String(value).toLowerCase() === 'true') return true;
   if (String(value).toLowerCase() === 'false') return false;
-  throw new ApiError_('VALIDATION_ERROR', name + ' moet true of false zijn', 400);
+  throw new ApiError_('VALIDATION_ERROR', name + ' must be true or false', 400);
 }
 
 function parseInteger_(value, name, min, max, defaultValue) {
@@ -1080,7 +1080,7 @@ function parseInteger_(value, name, min, max, defaultValue) {
   if (!Number.isInteger(number) || number < min || number > max) {
     throw new ApiError_(
       'VALIDATION_ERROR',
-      name + ' moet een geheel getal van ' + min + ' t/m ' + max + ' zijn',
+      name + ' must be an integer from ' + min + ' to ' + max,
       400
     );
   }
@@ -1093,7 +1093,7 @@ function parseDecimal_(value, name, min, max) {
   if (typeof normalized !== 'number' && !/^\d+(?:\.\d{1,2})?$/.test(normalized)) {
     throw new ApiError_(
       'VALIDATION_ERROR',
-      name + ' moet een getal met maximaal twee decimalen zijn',
+      name + ' must be a number with no more than two decimal places',
       400
     );
   }
@@ -1102,7 +1102,7 @@ function parseDecimal_(value, name, min, max) {
   if (!Number.isFinite(number) || rounded !== number || number < min || number > max) {
     throw new ApiError_(
       'VALIDATION_ERROR',
-      name + ' moet een getal van ' + min + ' t/m ' + max + ' zijn',
+      name + ' must be a number from ' + min + ' to ' + max,
       400
     );
   }
@@ -1114,7 +1114,7 @@ function parseVote_(value) {
   if (VOTE_VALUES.indexOf(estimate) === -1) {
     throw new ApiError_(
       'INVALID_ESTIMATE',
-      'Kies een toegestane schattingswaarde',
+      'Select an allowed estimate value',
       400
     );
   }
@@ -1125,7 +1125,7 @@ function assertOneOf_(value, allowedValues, name) {
   if (allowedValues.indexOf(value) === -1) {
     throw new ApiError_(
       'VALIDATION_ERROR',
-      name + ' heeft een ongeldige waarde',
+      name + ' has an invalid value',
       400
     );
   }
@@ -1140,13 +1140,13 @@ function assertRecordExists_(sheetName, id, code, message) {
 function validateHttpUrl_(value, name) {
   if (!value) return;
   if (!/^https?:\/\/[^\s]+$/i.test(value)) {
-    throw new ApiError_('VALIDATION_ERROR', name + ' moet een geldige http(s)-URL zijn', 400);
+    throw new ApiError_('VALIDATION_ERROR', name + ' must be a valid HTTP(S) URL', 400);
   }
 }
 
 function requirePost_(method) {
   if (method !== 'POST') {
-    throw new ApiError_('METHOD_NOT_ALLOWED', 'Gebruik POST voor deze action', 405);
+    throw new ApiError_('METHOD_NOT_ALLOWED', 'Use POST for this action', 405);
   }
 }
 

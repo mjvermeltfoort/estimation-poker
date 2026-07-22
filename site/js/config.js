@@ -8,7 +8,7 @@ export const CONFIG = {
 export function isApiConfigured() {
   return Boolean(
     CONFIG.apiUrl
-      && !CONFIG.apiUrl.includes("PLAATS_HIER")
+      && !CONFIG.apiUrl.includes("PASTE_HERE")
       && /^https:\/\//i.test(CONFIG.apiUrl),
   );
 }

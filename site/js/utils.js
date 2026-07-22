@@ -21,20 +21,21 @@ export function formatDate(value) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("nl-NL", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
 export function formatHours(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
-  return `${new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 2 }).format(number)} uur`;
+  const formatted = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 }).format(number);
+  return `${formatted} ${number === 1 ? "hour" : "hours"}`;
 }
 
 export function statusLabel(status) {
   return ({
-    draft: "Concept", active: "Actief", completed: "Afgerond", cancelled: "Geannuleerd",
-    pending: "Open", voting: "Stemmen", revealed: "Onthuld", estimated: "Geschat", skipped: "Overgeslagen",
-  })[status] || status || "Onbekend";
+    draft: "Draft", active: "Active", completed: "Completed", cancelled: "Cancelled",
+    pending: "Open", voting: "Voting", revealed: "Revealed", estimated: "Estimated", skipped: "Skipped",
+  })[status] || status || "Unknown";
 }
 
 export function statusBadge(status) {
@@ -81,7 +82,7 @@ export function safeJiraUrl(baseUrl, issueKey) {
   }
 }
 
-export function setBusy(buttons, busy, busyLabel = "Bezig…") {
+export function setBusy(buttons, busy, busyLabel = "Working…") {
   const values = Array.isArray(buttons) ? buttons : [buttons];
   values.forEach((button) => {
     if (!button) return;
@@ -97,5 +98,5 @@ export function setBusy(buttons, busy, busyLabel = "Bezig…") {
 }
 
 export function errorMessage(error) {
-  return error?.message || "Er is een onverwachte fout opgetreden.";
+  return error?.message || "An unexpected error occurred.";
 }

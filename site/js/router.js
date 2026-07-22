@@ -17,7 +17,7 @@ export function parseHashRoute(hash = window.location.hash) {
   try {
     path = decodeURI(rawPath || "/").replace(/\/+$/, "") || "/";
   } catch (error) {
-    console.warn("Ongeldige route-encoding.", error);
+    console.warn("Invalid route encoding.", error);
     return { name: "not-found", path: rawPath, params: {}, query: new URLSearchParams() };
   }
 
