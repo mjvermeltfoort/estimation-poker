@@ -142,14 +142,15 @@ function renderSession(app, model, viewer, roundNumber, context) {
           buttons.forEach((item) => { item.disabled = true; });
           button.classList.add("vote-card--selected");
           try {
-            await submitVote({
+            const result = await submitVote({
               sessionId,
               ticketId: ticket.id,
               roundNumber,
               estimateHours: value,
+              includeSessionState: true,
             });
             showToast("Vote saved", "success");
-            await refresh(true);
+            await refresh(true, result.sessionState);
           } catch (error) {
             showToast(errorMessage(error), "error");
             buttons.forEach((item) => { item.disabled = false; });
@@ -182,7 +183,13 @@ function renderSession(app, model, viewer, roundNumber, context) {
   app.replaceChildren(heading, el("div", { className: "session-layout" }, [ticketPanel, participantPanel]));
 }
 
-export async function renderSessionView({ app, route, isCurrent = () => true, refresh }) {
+export async function renderSessionView({
+  app,
+  route,
+  isCurrent = () => true,
+  refresh,
+  prefetchedSessionState = null,
+}) {
   const sessionId = route.params.sessionId;
   document.title = "Session · Estimation Poker";
   if (!isApiConfigured()) {
@@ -191,7 +198,7 @@ export async function renderSessionView({ app, route, isCurrent = () => true, re
   }
   if (!app.hasChildNodes()) app.append(el("section", { className: "loading-state", role: "status" }, [el("span", { className: "spinner" }), el("p", { text: "Loading session…" })]));
   try {
-    const model = normalizeSessionState(await getSessionState(sessionId));
+    const model = normalizeSessionState(prefetchedSessionState || await getSessionState(sessionId));
     if (!isCurrent()) return;
     if (!model) throw new Error("The session was not found or the response is incomplete.");
     if (!model.viewer?.memberId) throw new Error("The server did not return the signed-in team membership.");

@@ -1,4 +1,4 @@
-import { getHealth, list } from "../api.js";
+import { getHomeState, list } from "../api.js";
 import { getCurrentUser } from "../authSession.js";
 import { isApiConfigured } from "../config.js";
 import { state, setState } from "../state.js";
@@ -134,20 +134,15 @@ export async function renderHomeView({ app, isCurrent = () => true }) {
   setState({ initialLoading: true, error: null });
   renderLoading(app);
   try {
-    const [health, teamData] = await Promise.all([getHealth(), list("teams")]);
-    if (!isCurrent()) return;
-    const allTeams = normalizeList(teamData);
-    const activeTeams = allTeams.filter((team) => team.active !== false && String(team.active).toLowerCase() !== "false");
-    const teams = activeTeams.length ? activeTeams : allTeams;
     const storedTeamId = getStoredValue(STORAGE_KEYS.selectedTeamId, null);
-    const selectedTeamId = teams.some((team) => String(team.id) === String(storedTeamId))
-      ? storedTeamId
-      : teams[0]?.id || null;
-    const sessions = selectedTeamId
-      ? normalizeList(await list("estimationSessions", { teamId: selectedTeamId }))
-      : [];
+    const homeData = await getHomeState(storedTeamId);
     if (!isCurrent()) return;
-    setState({ apiStatus: health === false ? "offline" : "online", teams, selectedTeamId, sessions, initialLoading: false });
+    const teams = normalizeList(homeData?.teams);
+    const selectedTeamId = teams.some((team) => String(team.id) === String(homeData?.selectedTeamId))
+      ? homeData.selectedTeamId
+      : teams[0]?.id || null;
+    const sessions = normalizeList(homeData?.sessions);
+    setState({ apiStatus: "online", teams, selectedTeamId, sessions, initialLoading: false });
     if (selectedTeamId) setStoredValue(STORAGE_KEYS.selectedTeamId, selectedTeamId);
     renderHome(app);
   } catch (error) {

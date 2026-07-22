@@ -1,4 +1,4 @@
-import { create, finalizeTicket, getSessionState, revealTicket, update } from "../api.js";
+import { activateTicket as activateTicketRequest, create, finalizeTicket, getSessionState, revealTicket, update } from "../api.js";
 import { isApiConfigured } from "../config.js";
 import { showToast } from "../notifications.js";
 import { getStoredValue, roundStorageKey, setStoredValue, STORAGE_KEYS } from "../storage.js";
@@ -126,7 +126,7 @@ function addTicketForm(model, completed, refresh) {
     setBusy(submit, true, "Adding…");
     try {
       const sortOrder = model.tickets.reduce((maximum, ticket) => Math.max(maximum, Number(ticket.sortOrder) || 0), 0) + 1;
-      await create("estimationTickets", {
+      const result = await create("estimationTickets", {
         sessionId: model.session.id,
         jiraIssueKey: normalizedKey,
         summary: summary.value.trim(),
@@ -134,9 +134,9 @@ function addTicketForm(model, completed, refresh) {
         status: "pending",
         sortOrder,
         createdAt: new Date().toISOString(),
-      });
+      }, { includeSessionState: true });
       showToast("Ticket added", "success");
-      await refresh(true);
+      await refresh(true, result.sessionState);
     } catch (error) {
       showToast(errorMessage(error), "error");
       setBusy(submit, false);
@@ -165,16 +165,11 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
     if (["estimated", "revealed", "skipped"].includes(ticket.status)
       && !window.confirm("This ticket has already been handled. Do you still want to reactivate it?")) return;
     try {
-      await update("estimationSessions", sessionId, {
-        currentTicketId: ticket.id,
-        status: "active",
-        startedAt: session.startedAt || new Date().toISOString(),
-      });
-      await update("estimationTickets", ticket.id, { status: "voting" });
+      const result = await activateTicketRequest(sessionId, ticket.id);
       const key = roundStorageKey(sessionId, ticket.id);
       if (!getStoredValue(key, null, "sessionStorage")) setStoredValue(key, 1, "sessionStorage");
       showToast(`${ticket.jiraIssueKey || "Ticket"} is active`, "success");
-      await refresh(true);
+      await refresh(true, result.sessionState);
     } catch (error) {
       showToast(errorMessage(error), "error");
     }
@@ -251,9 +246,13 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
           }
           setBusy(save, true, "Saving…");
           try {
-            await finalizeTicket(currentTicket.id, value);
+            const result = await finalizeTicket(
+              currentTicket.id,
+              value,
+              { includeSessionState: true },
+            );
             showToast("Final estimate saved", "success");
-            await refresh(true);
+            await refresh(true, result.sessionState);
           } catch (error) {
             showToast(errorMessage(error), "error");
             setBusy(save, false);
@@ -279,9 +278,13 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
       && !window.confirm(`${currentVotes.length} of ${activeMembers.length} participants have voted. Reveal anyway?`)) return;
     setBusy(reveal, true, "Revealing…");
     try {
-      await revealTicket(currentTicket.id, roundNumber);
+      const result = await revealTicket(
+        currentTicket.id,
+        roundNumber,
+        { includeSessionState: true },
+      );
       showToast("Votes revealed", "success");
-      await refresh(true);
+      await refresh(true, result.sessionState);
     } catch (error) {
       showToast(errorMessage(error), "error");
       setBusy(reveal, false);
@@ -297,9 +300,14 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
     const nextRound = roundNumber + 1;
     try {
       setStoredValue(roundStorageKey(sessionId, currentTicket.id), nextRound, "sessionStorage");
-      await update("estimationTickets", currentTicket.id, { status: "voting" });
+      const result = await update(
+        "estimationTickets",
+        currentTicket.id,
+        { status: "voting" },
+        { includeSessionState: true },
+      );
       showToast(`Round ${nextRound} started`, "success");
-      await refresh(true);
+      await refresh(true, result.sessionState);
     } catch (error) {
       setStoredValue(roundStorageKey(sessionId, currentTicket.id), roundNumber, "sessionStorage");
       showToast(errorMessage(error), "error");
@@ -321,9 +329,14 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
     if (!window.confirm(warning)) return;
     setBusy(finish, true, "Completing…");
     try {
-      await update("estimationSessions", sessionId, { status: "completed", completedAt: new Date().toISOString(), currentTicketId: "" });
+      const result = await update(
+        "estimationSessions",
+        sessionId,
+        { status: "completed", completedAt: new Date().toISOString(), currentTicketId: "" },
+        { includeSessionState: true },
+      );
       showToast("Session completed", "success");
-      await refresh(true);
+      await refresh(true, result.sessionState);
     } catch (error) {
       showToast(errorMessage(error), "error");
       setBusy(finish, false);
@@ -345,7 +358,13 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
   );
 }
 
-export async function renderFacilitatorView({ app, route, isCurrent = () => true, refresh }) {
+export async function renderFacilitatorView({
+  app,
+  route,
+  isCurrent = () => true,
+  refresh,
+  prefetchedSessionState = null,
+}) {
   const sessionId = route.params.sessionId;
   document.title = "Facilitate · Estimation Poker";
   if (!isApiConfigured()) {
@@ -354,7 +373,7 @@ export async function renderFacilitatorView({ app, route, isCurrent = () => true
   }
   if (!app.hasChildNodes()) app.append(el("section", { className: "loading-state", role: "status" }, [el("span", { className: "spinner" }), el("p", { text: "Loading facilitator screen…" })]));
   try {
-    const model = normalizeSessionState(await getSessionState(sessionId));
+    const model = normalizeSessionState(prefetchedSessionState || await getSessionState(sessionId));
     if (!isCurrent()) return;
     if (!model) throw new Error("The session was not found or the response is incomplete.");
     if (!model.viewer?.canFacilitate) {

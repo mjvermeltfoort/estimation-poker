@@ -130,6 +130,10 @@ export function getMe() {
   return request({ payload: { action: "me" } });
 }
 
+export function getHomeState(teamId = null) {
+  return request({ payload: { action: "homeState", teamId } });
+}
+
 export function list(entity, filters = {}) {
   return request({ payload: { action: "list", entity, filters } });
 }
@@ -138,30 +142,34 @@ export function get(entity, id) {
   return request({ payload: { action: "get", entity, id } });
 }
 
-export function create(entity, data) {
-  return request({ method: "POST", payload: { action: "create", entity, data } });
+export function create(entity, data, { includeSessionState = false } = {}) {
+  return request({ method: "POST", payload: { action: "create", entity, data, includeSessionState } });
 }
 
-export function update(entity, id, data) {
-  return request({ method: "POST", payload: { action: "update", entity, id, data } });
+export function update(entity, id, data, { includeSessionState = false } = {}) {
+  return request({ method: "POST", payload: { action: "update", entity, id, data, includeSessionState } });
 }
 
-export function remove(entity, id) {
-  return request({ method: "POST", payload: { action: "delete", entity, id } });
+export function remove(entity, id, { includeSessionState = false } = {}) {
+  return request({ method: "POST", payload: { action: "delete", entity, id, includeSessionState } });
 }
 
 export function getSessionState(sessionId) {
   return request({ payload: { action: "sessionState", sessionId } });
 }
 
+export function activateTicket(sessionId, ticketId) {
+  return request({ method: "POST", payload: { action: "activateTicket", sessionId, ticketId } });
+}
+
 export function submitVote(payload) {
   return request({ method: "POST", payload: { action: "submitVote", ...payload } });
 }
 
-export function revealTicket(ticketId, roundNumber) {
-  return request({ method: "POST", payload: { action: "revealTicket", ticketId, roundNumber } });
+export function revealTicket(ticketId, roundNumber, { includeSessionState = false } = {}) {
+  return request({ method: "POST", payload: { action: "revealTicket", ticketId, roundNumber, includeSessionState } });
 }
 
-export function finalizeTicket(ticketId, finalEstimateHours) {
-  return request({ method: "POST", payload: { action: "finalizeTicket", ticketId, finalEstimateHours } });
+export function finalizeTicket(ticketId, finalEstimateHours, { includeSessionState = false } = {}) {
+  return request({ method: "POST", payload: { action: "finalizeTicket", ticketId, finalEstimateHours, includeSessionState } });
 }

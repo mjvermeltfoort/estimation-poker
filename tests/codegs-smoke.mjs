@@ -7,8 +7,13 @@ function assert(condition, message) {
 function createSheet(rows) {
   return {
     rows,
+    readCount: 0,
     getLastColumn() { return this.rows[0]?.length || 0; },
     getLastRow() { return this.rows.length; },
+    getDataRange() {
+      this.readCount += 1;
+      return this.getRange(1, 1, this.getLastRow(), this.getLastColumn());
+    },
     getRange(row, column, rowCount, columnCount) {
       return {
         getValues: () => Array.from({ length: rowCount }, (_, rowOffset) => (
@@ -201,6 +206,10 @@ assert(visibleMembers.ok === true && visibleMembers.data.length === 2, "Team mem
 assert(!("email" in visibleMembers.data[0]), "Team-member email addresses leak through the API.");
 assert(!("privateNotes" in visibleMembers.data[0]), "Unknown Sheet columns leak through the member API.");
 
+const homeState = request("POST", {}, { action: "homeState", teamId: "team-2" });
+assert(homeState.ok === true && homeState.data.teams.length === 1, "The combined home response did not return accessible teams.");
+assert(homeState.data.selectedTeamId === "team-1" && homeState.data.sessions.length === 1, "The combined home response selected an inaccessible team or omitted sessions.");
+
 const createdSession = request("POST", {}, {
   action: "create",
   entity: "estimationSessions",
@@ -222,8 +231,11 @@ const memberSessionCreation = request("POST", {}, {
 }, linusToken);
 assert(memberSessionCreation.ok === false && memberSessionCreation.error.code === "FACILITATOR_REQUIRED", "A regular member can create a session.");
 
+Object.values(sheets).forEach((sheet) => { sheet.readCount = 0; });
 let state = request("POST", {}, { action: "sessionState", sessionId: "session-1" });
 assert(state.ok === true && state.data.team.id === "team-1", "Session state is missing team data.");
+assert(sheets.TeamMembers.readCount === 1, "Team members were read more than once in a session-state request.");
+assert([sheets.Teams, sheets.EstimationSessions, sheets.EstimationTickets, sheets.Votes].every((sheet) => sheet.readCount === 1), "A session-state sheet was read more than once in one request.");
 assert(!("privateNotes" in state.data.team) && !("privateNotes" in state.data.currentTicket), "Unknown Sheet columns leak through session state.");
 assert(state.data.viewer.memberId === "member-1", "Session identity was not derived from the signed-in account.");
 assert(state.data.viewer.role === "facilitator" && state.data.viewer.canFacilitate === true, "Facilitator membership is not exposed correctly to the UI.");
@@ -287,14 +299,18 @@ const staleVote = request("POST", {}, {
 });
 assert(staleVote.ok === false && staleVote.error.code === "ROUND_MISMATCH", "A vote for a stale round was accepted.");
 
+Object.values(sheets).forEach((sheet) => { sheet.readCount = 0; });
 const currentVote = request("POST", {}, {
   action: "submitVote",
   sessionId: "session-1",
   ticketId: "ticket-1",
   roundNumber: 2,
   estimateHours: 12,
+  includeSessionState: true,
 });
 assert(currentVote.ok === true && currentVote.data.hasVoted === true, "A facilitator could not join as a participant and vote.");
+assert(currentVote.data.sessionState.votes.length === 1 && !("estimateHours" in currentVote.data.sessionState.votes[0]), "A combined mutation response leaks an unrevealed vote.");
+assert(Object.values(sheets).every((sheet) => sheet.readCount === 1), "A combined vote-and-refresh request read a sheet more than once.");
 
 state = request("POST", {}, { action: "sessionState", sessionId: "session-1" });
 assert(state.data.votes.length === 1 && !("estimateHours" in state.data.votes[0]), "The new vote leaks before reveal.");
@@ -316,5 +332,14 @@ assert(finalized.ok === true && finalized.data.status === "estimated", "The fina
 state = request("POST", {}, { action: "sessionState", sessionId: "session-1" });
 assert(state.data.votes[0].estimateHours === 12, "Votes disappear after a ticket receives a final estimate.");
 assert(state.data.statistics.median === 12, "Final session statistics are incorrect.");
+
+const activated = request("POST", {}, {
+  action: "activateTicket",
+  sessionId: "session-1",
+  ticketId: "ticket-1",
+});
+assert(activated.ok === true && activated.data.sessionState.currentTicket.status === "voting", "Ticket activation did not return refreshed session state.");
+assert(activated.data.sessionState.currentRoundNumber === 3, "Reactivating an estimated ticket did not advance the round.");
+assert(activated.data.sessionState.votes.length === 0, "A combined activation response included votes from an earlier round.");
 
 print("Code.gs smoke tests passed");

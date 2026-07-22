@@ -13,6 +13,14 @@ const AUTH_SESSION_TTL_SECONDS = 2 * 60 * 60;
 const AUTH_CLOCK_SKEW_SECONDS = 60;
 const VOTE_VALUES = [0.5, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 40];
 
+// Apps Script calls into SpreadsheetApp are comparatively expensive. These
+// caches live for one web-app request only and are reset in handleRequest_.
+// They avoid reading the same sheet again during authentication, validation,
+// mutation, and response assembly without making data stale across requests.
+let requestSheetDataCache_ = {};
+let requestRowsCache_ = {};
+let requestSpreadsheet_ = null;
+
 const SESSION_STATUSES = ['draft', 'active', 'completed', 'cancelled'];
 const TICKET_STATUSES = ['pending', 'voting', 'revealed', 'estimated', 'skipped'];
 const MEMBER_ROLES = ['member', 'facilitator'];
@@ -76,6 +84,7 @@ function doPost(e) {
 }
 
 function handleRequest_(method, e) {
+  resetRequestCaches_();
   try {
     const params = (e && e.parameter) || {};
     const body = parseBody_(e);
@@ -95,7 +104,9 @@ function handleRequest_(method, e) {
             'POST action=create',
             'POST action=update',
             'POST action=delete',
+            'POST action=homeState',
             'POST action=sessionState',
+            'POST action=activateTicket',
             'POST action=submitVote',
             'POST action=revealTicket',
             'POST action=finalizeTicket'
@@ -140,20 +151,44 @@ function handleRequest_(method, e) {
           body.id
         ));
 
-      case 'create':
-        return jsonResponse_(withScriptLock_(function() {
+      case 'create': {
+        const created = withScriptLock_(function() {
           return createEntity_(actor, body.entity, body.data || {});
-        }));
+        });
+        return jsonResponse_(attachSessionState_(
+          created,
+          actor,
+          body.includeSessionState,
+          sessionIdForEntity_(body.entity, created.data)
+        ));
+      }
 
-      case 'update':
-        return jsonResponse_(withScriptLock_(function() {
+      case 'update': {
+        const updated = withScriptLock_(function() {
           return updateEntity_(actor, body.entity, body.id, body.data || {});
-        }));
+        });
+        return jsonResponse_(attachSessionState_(
+          updated,
+          actor,
+          body.includeSessionState,
+          sessionIdForEntity_(body.entity, updated.data)
+        ));
+      }
 
-      case 'delete':
-        return jsonResponse_(withScriptLock_(function() {
+      case 'delete': {
+        const deleted = withScriptLock_(function() {
           return deleteEntity_(actor, body.entity, body.id);
-        }));
+        });
+        return jsonResponse_(attachSessionState_(
+          deleted,
+          actor,
+          body.includeSessionState,
+          sessionIdForEntity_(body.entity, deleted.data)
+        ));
+      }
+
+      case 'homeState':
+        return jsonResponse_(getHomeState_(actor, body.teamId));
 
       case 'sessionState':
         return jsonResponse_(getSessionState_(
@@ -161,20 +196,53 @@ function handleRequest_(method, e) {
           body.sessionId
         ));
 
-      case 'submitVote':
-        return jsonResponse_(withScriptLock_(function() {
+      case 'activateTicket': {
+        const activated = withScriptLock_(function() {
+          return activateTicket_(actor, body);
+        });
+        return jsonResponse_(attachSessionState_(
+          activated,
+          actor,
+          true,
+          body.sessionId
+        ));
+      }
+
+      case 'submitVote': {
+        const submittedVote = withScriptLock_(function() {
           return submitVote_(actor, body);
-        }));
+        });
+        return jsonResponse_(attachSessionState_(
+          submittedVote,
+          actor,
+          body.includeSessionState,
+          body.sessionId
+        ));
+      }
 
-      case 'revealTicket':
-        return jsonResponse_(withScriptLock_(function() {
+      case 'revealTicket': {
+        const revealedTicket = withScriptLock_(function() {
           return revealTicket_(actor, body);
-        }));
+        });
+        return jsonResponse_(attachSessionState_(
+          revealedTicket,
+          actor,
+          body.includeSessionState,
+          revealedTicket.data.ticket.sessionId
+        ));
+      }
 
-      case 'finalizeTicket':
-        return jsonResponse_(withScriptLock_(function() {
+      case 'finalizeTicket': {
+        const finalizedTicket = withScriptLock_(function() {
           return finalizeTicket_(actor, body);
-        }));
+        });
+        return jsonResponse_(attachSessionState_(
+          finalizedTicket,
+          actor,
+          body.includeSessionState,
+          finalizedTicket.data.sessionId
+        ));
+      }
 
       default:
         throw new ApiError_('UNKNOWN_ACTION', 'Unknown action: ' + action, 400);
@@ -631,6 +699,47 @@ function listEntities_(actor, entityName, filters) {
   };
 }
 
+function getHomeState_(actor, requestedTeamId) {
+  const allTeams = listEntities_(actor, 'teams', { limit: MAX_PAGE_SIZE }).data;
+  const activeTeams = allTeams.filter(function(team) { return toBoolean_(team.active); });
+  const teams = activeTeams.length ? activeTeams : allTeams;
+  const preferredTeamId = cleanString_(requestedTeamId, 200);
+  const selectedTeam = teams.find(function(team) {
+    return preferredTeamId && sameId_(team.id, preferredTeamId);
+  }) || teams[0] || null;
+  const sessions = selectedTeam
+    ? listEntities_(actor, 'estimationSessions', {
+      teamId: selectedTeam.id,
+      limit: MAX_PAGE_SIZE
+    }).data
+    : [];
+
+  return {
+    ok: true,
+    data: {
+      apiVersion: API_VERSION,
+      timestamp: nowIso_(),
+      teams: teams,
+      selectedTeamId: selectedTeam ? selectedTeam.id : null,
+      sessions: sessions
+    }
+  };
+}
+
+function sessionIdForEntity_(entityName, record) {
+  if (!record) return '';
+  if (entityName === 'estimationSessions') return record.id;
+  if (entityName === 'estimationTickets' || entityName === 'votes') return record.sessionId;
+  return '';
+}
+
+function attachSessionState_(response, actor, includeSessionState, sessionId) {
+  if (!toBoolean_(includeSessionState)) return response;
+  const normalizedSessionId = requiredString_(sessionId, 'sessionId', 200);
+  response.data.sessionState = getSessionState_(actor, normalizedSessionId).data;
+  return response;
+}
+
 function getEntity_(actor, entityName, id) {
   const config = getPublicEntityConfig_(entityName);
   const normalizedId = requiredString_(id, 'id', 200);
@@ -805,6 +914,41 @@ function getSessionState_(actor, sessionId) {
         role: viewer.role,
         canFacilitate: viewer.role === 'facilitator'
       }
+    }
+  };
+}
+
+function activateTicket_(actor, body) {
+  assertPlainObject_(body, 'body');
+  const sessionId = requiredString_(body.sessionId, 'sessionId', 200);
+  const ticketId = requiredString_(body.ticketId, 'ticketId', 200);
+  const session = findById_('EstimationSessions', sessionId);
+  if (!session) throw new ApiError_('SESSION_NOT_FOUND', 'Session not found', 404);
+  requireFacilitator_(actor, session.teamId);
+  if (['completed', 'cancelled'].indexOf(session.status) !== -1) {
+    throw new ApiError_('SESSION_CLOSED', 'This session is closed', 409);
+  }
+
+  const ticket = findById_('EstimationTickets', ticketId);
+  if (!ticket || !sameId_(ticket.sessionId, sessionId)) {
+    throw new ApiError_('TICKET_NOT_FOUND', 'Ticket not found in session', 404);
+  }
+
+  // Use the existing entity update path so all relation, round, and status
+  // validation remains in one place while the two writes share one lock.
+  const updatedSession = updateEntity_(actor, 'estimationSessions', sessionId, {
+    currentTicketId: ticketId,
+    status: 'active'
+  });
+  const updatedTicket = updateEntity_(actor, 'estimationTickets', ticketId, {
+    status: 'voting'
+  });
+
+  return {
+    ok: true,
+    data: {
+      session: updatedSession.data,
+      ticket: updatedTicket.data
     }
   };
 }
@@ -1278,17 +1422,34 @@ function clearRound_(ticketId) {
   );
 }
 
-function readRows_(sheetName) {
-  const data = getSheetData_(sheetName);
-  if (data.values.length < 2) return [];
+function resetRequestCaches_() {
+  requestSheetDataCache_ = {};
+  requestRowsCache_ = {};
+  requestSpreadsheet_ = null;
+}
 
-  return data.values.slice(1)
+function invalidateRowsCache_(sheetName) {
+  delete requestRowsCache_[sheetName];
+}
+
+function readRows_(sheetName) {
+  if (Object.prototype.hasOwnProperty.call(requestRowsCache_, sheetName)) {
+    return requestRowsCache_[sheetName];
+  }
+  const data = getSheetData_(sheetName);
+  if (data.values.length < 2) {
+    requestRowsCache_[sheetName] = [];
+    return requestRowsCache_[sheetName];
+  }
+
+  requestRowsCache_[sheetName] = data.values.slice(1)
     .filter(function(row) {
       return row.some(function(value) { return value !== ''; });
     })
     .map(function(row) {
       return rowToRecord_(data.headers, row);
     });
+  return requestRowsCache_[sheetName];
 }
 
 function findById_(sheetName, id) {
@@ -1302,7 +1463,9 @@ function appendRecord_(sheetName, record) {
   const row = data.headers.map(function(header) {
     return record[header] === undefined ? '' : record[header];
   });
-  data.sheet.getRange(data.sheet.getLastRow() + 1, 1, 1, row.length).setValues([row]);
+  data.sheet.getRange(data.values.length + 1, 1, 1, row.length).setValues([row]);
+  data.values.push(row);
+  invalidateRowsCache_(sheetName);
 }
 
 function updateRecord_(sheetName, id, patch) {
@@ -1326,6 +1489,8 @@ function updateRecord_(sheetName, id, patch) {
         data.sheet.getRange(rowIndex + 1, columnIndex + 1).setValue(patch[key]);
       }
     });
+    data.values[rowIndex] = updatedRow;
+    invalidateRowsCache_(sheetName);
     return rowToRecord_(data.headers, updatedRow);
   }
 
@@ -1340,6 +1505,8 @@ function deleteRecord_(sheetName, id) {
     if (sameId_(data.values[rowIndex][idIndex], id)) {
       const deleted = rowToRecord_(data.headers, data.values[rowIndex]);
       data.sheet.deleteRow(rowIndex + 1);
+      data.values.splice(rowIndex, 1);
+      invalidateRowsCache_(sheetName);
       return deleted;
     }
   }
@@ -1348,22 +1515,24 @@ function deleteRecord_(sheetName, id) {
 }
 
 function getSheetData_(sheetName) {
+  if (Object.prototype.hasOwnProperty.call(requestSheetDataCache_, sheetName)) {
+    return requestSheetDataCache_[sheetName];
+  }
   const sheet = getSheet_(sheetName);
   const config = getEntityConfigBySheetName_(sheetName);
-  const lastColumn = sheet.getLastColumn();
-  const lastRow = sheet.getLastRow();
+  const values = sheet.getDataRange().getValues();
 
-  if (lastColumn < 1 || lastRow < 1) {
+  if (!values.length || !values[0].length) {
     throw new ApiError_('INVALID_SHEET', 'Sheet has no header row: ' + sheetName, 500);
   }
 
-  const values = sheet.getRange(1, 1, lastRow, lastColumn).getValues();
   const headers = values[0].map(function(header) {
     return String(header).trim();
   });
   validateHeaders_(sheetName, headers, config.fields);
 
-  return { sheet: sheet, headers: headers, values: values };
+  requestSheetDataCache_[sheetName] = { sheet: sheet, headers: headers, values: values };
+  return requestSheetDataCache_[sheetName];
 }
 
 function validateHeaders_(sheetName, headers, requiredHeaders) {
@@ -1394,11 +1563,13 @@ function rowToRecord_(headers, row) {
 }
 
 function getSheet_(sheetName) {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  if (!spreadsheet) {
+  if (!requestSpreadsheet_) {
+    requestSpreadsheet_ = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  if (!requestSpreadsheet_) {
     throw new ApiError_('SPREADSHEET_NOT_FOUND', 'No active spreadsheet found', 500);
   }
-  const sheet = spreadsheet.getSheetByName(sheetName);
+  const sheet = requestSpreadsheet_.getSheetByName(sheetName);
   if (!sheet) {
     throw new ApiError_('SHEET_NOT_FOUND', 'Missing sheet: ' + sheetName, 500);
   }

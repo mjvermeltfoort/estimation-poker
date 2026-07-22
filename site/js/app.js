@@ -43,7 +43,11 @@ function updateConfigBanner() {
   configBanner.replaceChildren(strong, text);
 }
 
-async function routeToView(route, generation, { background = false, force = false } = {}) {
+async function routeToView(route, generation, {
+  background = false,
+  force = false,
+  prefetchedSessionState = null,
+} = {}) {
   if (generation !== routeGeneration) return;
   const activeElement = document.activeElement;
   if (background && !force && activeElement?.matches("input, textarea, select")) return;
@@ -51,8 +55,12 @@ async function routeToView(route, generation, { background = false, force = fals
   if (background && refreshStatus) refreshStatus.textContent = "Refreshing…";
 
   const isCurrent = () => generation === routeGeneration;
-  const refresh = (forceRefresh = false) => routeToView(route, generation, { background: true, force: forceRefresh });
-  const context = { app, route, isCurrent, refresh };
+  const refresh = (forceRefresh = false, nextSessionState = null) => routeToView(route, generation, {
+    background: true,
+    force: forceRefresh,
+    prefetchedSessionState: nextSessionState,
+  });
+  const context = { app, route, isCurrent, refresh, prefetchedSessionState };
   try {
     switch (route.name) {
       case "home": await renderHomeView(context); break;
