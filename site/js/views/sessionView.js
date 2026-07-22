@@ -247,9 +247,15 @@ export async function renderSessionView({ app, route, isCurrent = () => true, re
     setStoredValue(STORAGE_KEYS.selectedMemberId, selectedMember.id);
     setStoredValue(STORAGE_KEYS.lastSessionId, sessionId);
     const ticket = currentTicketFor(model);
-    const roundNumber = ticket
-      ? Number(getStoredValue(roundStorageKey(sessionId, ticket.id), model.currentRoundNumber || 1, "sessionStorage")) || 1
-      : 1;
+    let roundNumber = 1;
+    if (ticket) {
+      const serverRound = Number(model.currentRoundNumber);
+      const storedRound = Number(getStoredValue(roundStorageKey(sessionId, ticket.id), 1, "sessionStorage"));
+      roundNumber = Number.isInteger(serverRound) && serverRound > 0
+        ? serverRound
+        : Number.isInteger(storedRound) && storedRound > 0 ? storedRound : 1;
+      setStoredValue(roundStorageKey(sessionId, ticket.id), roundNumber, "sessionStorage");
+    }
     renderSession(app, model, selectedMember, roundNumber, { sessionId, refresh });
   } catch (error) {
     if (!isCurrent()) return;

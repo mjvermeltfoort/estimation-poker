@@ -409,9 +409,15 @@ export async function renderFacilitatorView({ app, route, isCurrent = () => true
     setStoredValue(STORAGE_KEYS.facilitatorMemberId, facilitator.id);
     setStoredValue(STORAGE_KEYS.lastSessionId, sessionId);
     const currentTicket = getCurrentTicket(model);
-    const roundNumber = currentTicket
-      ? Number(getStoredValue(roundStorageKey(sessionId, currentTicket.id), model.currentRoundNumber || 1, "sessionStorage")) || 1
-      : 1;
+    let roundNumber = 1;
+    if (currentTicket) {
+      const serverRound = Number(model.currentRoundNumber);
+      const storedRound = Number(getStoredValue(roundStorageKey(sessionId, currentTicket.id), 1, "sessionStorage"));
+      roundNumber = Number.isInteger(serverRound) && serverRound > 0
+        ? serverRound
+        : Number.isInteger(storedRound) && storedRound > 0 ? storedRound : 1;
+      setStoredValue(roundStorageKey(sessionId, currentTicket.id), roundNumber, "sessionStorage");
+    }
     renderFacilitator(app, model, facilitator, roundNumber, { sessionId, refresh });
   } catch (error) {
     if (!isCurrent()) return;

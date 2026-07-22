@@ -15,7 +15,7 @@ globalThis.URLSearchParams = class URLSearchParams {
   }
 };
 
-const { isApiConfigured } = await import("../site/js/config.js");
+const { CONFIG, isApiConfigured } = await import("../site/js/config.js");
 const { parseHashRoute } = await import("../site/js/router.js");
 const { calculateStatistics, sortTickets, statusLabel } = await import("../site/js/utils.js");
 
@@ -45,6 +45,11 @@ assert(statistics.average === 5.25 && statistics.median === 5, "Gemiddelde of me
 const sorted = sortTickets([{ id: "late", sortOrder: 2 }, { id: "first", sortOrder: 1 }]);
 assert(sorted[0].id === "first", "Tickets worden niet op sortOrder gesorteerd.");
 assert(statusLabel("voting") === "Stemmen", "Statuslabel is onjuist.");
-assert(isApiConfigured() === false, "De placeholder-URL mag niet als geconfigureerd gelden.");
+const expectedConfiguredState = Boolean(
+  CONFIG.apiUrl
+    && !CONFIG.apiUrl.includes("PLAATS_HIER")
+    && /^https:\/\//i.test(CONFIG.apiUrl),
+);
+assert(isApiConfigured() === expectedConfiguredState, "De API-configuratiestatus is onjuist.");
 
 print("Smoke tests geslaagd");

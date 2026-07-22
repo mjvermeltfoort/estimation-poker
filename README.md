@@ -40,6 +40,7 @@ De frontend bestaat uit HTML5, moderne CSS en vanilla JavaScript ES modules. All
 │       └── views/                # routeviews
 ├── AGENTS.md
 ├── LICENSE
+├── resources/Code.gs            # Google Apps Script-backend
 ├── tests/smoke.mjs              # frameworkloze router- en statistiektests
 └── README.md
 ```
@@ -68,7 +69,7 @@ Open daarna [http://localhost:8080](http://localhost:8080). Gebruik niet rechtst
 
 1. Open de Google Sheet.
 2. Kies `Extensies → Apps Script`.
-3. Plaats of open het Apps Script dat het gedocumenteerde backendcontract uitvoert.
+3. Kopieer de inhoud van [`resources/Code.gs`](resources/Code.gs) naar het Apps Script-project.
 4. Kies `Implementeren → Nieuwe implementatie`.
 5. Kies `Web-app`.
 6. Laat de app uitvoeren als de eigenaar.
@@ -116,7 +117,6 @@ De workflow valideert de essentiële bestanden, uploadt uitsluitend `site/` en d
 - De app gebruikt polling in plaats van realtime WebSockets.
 - Jira-tickets worden handmatig ingevoerd; er is geen Jira-koppeling.
 - Er zijn geen veilige accounts, rollen of backendautorisatie.
-- Informatie over de actieve ronde staat deels in `sessionStorage`; een gedeeld backend-rondenummer verdient de voorkeur in een volgende versie.
 - Er is geen offlineondersteuning of service worker.
 - Er is geen automatisch statistiekendashboard of historische rapportage.
 - Apps Script en Google Sheets zijn niet bedoeld voor grote aantallen gelijktijdige gebruikers.
@@ -145,6 +145,7 @@ Wanneer GJS beschikbaar is, draaien de frameworkloze smoke tests met:
 
 ```bash
 gjs -m tests/smoke.mjs
+gjs -m tests/codegs-smoke.mjs
 ```
 
 ## Licentie
