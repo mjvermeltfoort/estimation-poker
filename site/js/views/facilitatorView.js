@@ -250,17 +250,28 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
     ]));
   } else {
     const jiraUrl = currentTicket.jiraBrowseUrl || safeJiraUrl(model.team?.jiraBaseUrl || session.team?.jiraBaseUrl, currentTicket.jiraIssueKey);
-    const keyNode = jiraUrl
-      ? el("a", {
-        className: "ticket-key",
-        href: jiraUrl.toString(),
-        target: "jira-ticket",
-        rel: "noopener noreferrer",
-        text: currentTicket.jiraIssueKey || "Ticket",
-      })
-      : el("span", { className: "ticket-key", text: currentTicket.jiraIssueKey || "Ticket" });
+    const titleRow = el("div", { className: "button-row" }, [
+      el("h2", { text: currentTicket.jiraIssueKey || "Ticket" }),
+      jiraUrl
+        ? el("a", {
+          className: "button button--ghost",
+          href: jiraUrl.toString(),
+          target: "_blank",
+          rel: "noopener noreferrer",
+          "aria-label": `Open ${currentTicket.jiraIssueKey || "ticket"} in new tab`,
+          text: "Open",
+        }, [
+          el("svg", { width: "14", height: "14", viewBox: "0 0 24 24", "aria-hidden": "true" }, [
+            el("path", {
+              d: "M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3zM19 19H5V5h6V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2v6z",
+              fill: "currentColor",
+            }),
+          ]),
+        ])
+        : null,
+    ]);
     focus.append(
-      el("div", { className: "ticket-heading" }, [el("div", {}, [keyNode, el("h2", { text: currentTicket.jiraIssueKey || "Ticket" })]), statusBadge(currentTicket.status)]),
+      el("div", { className: "ticket-heading" }, [el("div", {}, [titleRow]), statusBadge(currentTicket.status)]),
       currentTicket.projectName
         ? el("p", { className: "muted", text: `Project: ${currentTicket.projectName} (${currentTicket.projectKey || ""})` })
         : null,
