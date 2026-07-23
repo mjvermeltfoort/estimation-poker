@@ -11,6 +11,10 @@ function isActive(record) {
   return record.active !== false && String(record.active).toLowerCase() !== "false";
 }
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || "").trim());
+}
+
 function addField(form, { id, label, type = "text", required = false, placeholder = "", multiline = false }) {
   const input = el(multiline ? "textarea" : "input", {
     id,
@@ -95,6 +99,7 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
       jiraKey.input.value = normalizedKey;
       let valid = true;
       if (!teamSelect.value) { teamError.textContent = "Select a team."; valid = false; }
+      if (teamSelect.value && !isUuid(teamSelect.value)) { teamError.textContent = "Select a valid team."; valid = false; }
       if (!name.input.value.trim()) { name.error.textContent = "Enter a session name."; valid = false; }
       if (normalizedKey && !summary.input.value.trim()) { summary.error.textContent = "A title is required when you enter a Jira key."; valid = false; }
       if (!normalizedKey && summary.input.value.trim()) { jiraKey.error.textContent = "A Jira key is required when you add a ticket."; valid = false; }
@@ -105,8 +110,6 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
         const sessionData = await create("estimationSessions", {
           teamId: teamSelect.value,
           name: name.input.value.trim(),
-          status: "draft",
-          currentTicketId: null,
         });
         const session = sessionData?.session || sessionData;
         if (!session?.id) throw new Error("The server did not return a session ID.");
