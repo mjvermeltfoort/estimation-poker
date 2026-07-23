@@ -51,7 +51,7 @@ as $$
   from public.team_members tm
   where tm.team_id = p_team_id
     and tm.active = true
-    and tm.role = 'admin'
+    and tm.role::text = 'admin'
     and (
       tm.user_id = auth.uid()
       or lower(tm.email) = lower(public.current_user_email())
@@ -115,7 +115,7 @@ begin
       from public.team_members tm
       where tm.team_id = team.id
         and tm.active = true
-        and tm.role = 'admin'
+        and tm.role::text = 'admin'
         and (
           tm.user_id = auth.uid()
           or lower(tm.email) = lower(public.current_user_email())
@@ -332,9 +332,9 @@ begin
     v_role := v_target.role;
   end if;
 
-  if v_target.active = true and v_target.role = 'admin' and (
+  if v_target.active = true and v_target.role::text = 'admin' and (
     (p_active is false)
-    or (p_role is not null and v_role <> 'admin')
+    or (p_role is not null and v_role::text <> 'admin')
   ) then
     v_remove_admin := true;
   end if;
@@ -345,7 +345,7 @@ begin
     from public.team_members tm
     where tm.team_id = v_target.team_id
       and tm.active = true
-      and tm.role = 'admin'
+      and tm.role::text = 'admin'
       and tm.id <> v_target.id;
 
     if v_other_admin_count = 0 then
