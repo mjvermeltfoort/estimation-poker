@@ -24,8 +24,7 @@ create table if not exists public.team_members (
   email text not null,
   role public.estimation_role not null default 'member',
   active boolean not null default true,
-  created_at timestamptz not null default timezone('utc', now()),
-  unique (team_id, lower(email))
+  created_at timestamptz not null default timezone('utc', now())
 );
 
 create table if not exists public.estimation_sessions (
@@ -71,6 +70,7 @@ create table if not exists public.votes (
 );
 
 create index if not exists idx_team_members_user_id on public.team_members(user_id);
+create unique index if not exists idx_team_members_team_id_lower_email_unique on public.team_members(team_id, lower(email));
 create index if not exists idx_sessions_team_id on public.estimation_sessions(team_id);
 create index if not exists idx_tickets_session_id on public.estimation_tickets(session_id);
 create index if not exists idx_votes_ticket_round on public.votes(ticket_id, round_number);
