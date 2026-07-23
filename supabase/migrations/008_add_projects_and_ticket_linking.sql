@@ -34,7 +34,8 @@ where ticket_number is null
 
 alter table public.projects enable row level security;
 
-create policy if not exists projects_select_member
+drop policy if exists projects_select_member on public.projects;
+create policy projects_select_member
 on public.projects
 for select
 using (
@@ -50,7 +51,8 @@ using (
   )
 );
 
-create policy if not exists projects_mutate_facilitator
+drop policy if exists projects_mutate_facilitator on public.projects;
+create policy projects_mutate_facilitator
 on public.projects
 for all
 using (public.current_user_can_facilitate(team_id))
