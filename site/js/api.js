@@ -307,5 +307,8 @@ export function getSupabaseGoogleAuthorizeUrl(redirectTo) {
   const url = new URL("auth/v1/authorize", `${baseUrl.toString().replace(/\/$/, "")}/`);
   url.searchParams.set("provider", "google");
   url.searchParams.set("redirect_to", redirectTo);
+  // This frontend consumes access_token from the URL hash after OAuth callback.
+  // Requesting token response prevents code-only callbacks that need PKCE exchange.
+  url.searchParams.set("response_type", "token");
   return url.toString();
 }
