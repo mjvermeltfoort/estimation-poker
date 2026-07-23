@@ -3,9 +3,9 @@
 
 create extension if not exists pgcrypto;
 
-create type public.estimation_role as enum ('member', 'facilitator');
-create type public.session_status as enum ('draft', 'active', 'completed', 'cancelled');
-create type public.ticket_status as enum ('pending', 'voting', 'revealed', 'estimated', 'skipped');
+-- create type public.estimation_role as enum ('member', 'facilitator');
+-- create type public.session_status as enum ('draft', 'active', 'completed', 'cancelled');
+-- create type public.ticket_status as enum ('pending', 'voting', 'revealed', 'estimated', 'skipped');
 
 create table if not exists public.teams (
   id uuid primary key default gen_random_uuid(),
