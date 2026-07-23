@@ -7,7 +7,7 @@ function readStoredSession() {
     const raw = window.sessionStorage.getItem(AUTH_SESSION_KEY);
     if (!raw) return null;
     const value = JSON.parse(raw);
-    if (!value?.token || !value?.user || !Number.isFinite(Number(value.expiresAt))) return null;
+    if (!value?.token || !Number.isFinite(Number(value.expiresAt))) return null;
     if (Number(value.expiresAt) <= Date.now()) return null;
     return value;
   } catch (error) {
@@ -36,7 +36,8 @@ export function setAuthSession(session) {
   const normalized = {
     token: String(session.token),
     expiresAt: Number(session.expiresAt),
-    user: session.user,
+    refreshToken: session.refreshToken ? String(session.refreshToken) : null,
+    user: session.user || null,
   };
   memorySession = normalized;
   window.sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(normalized));

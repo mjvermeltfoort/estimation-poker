@@ -193,7 +193,7 @@ export async function renderSessionView({
   const sessionId = route.params.sessionId;
   document.title = "Session · Estimation Poker";
   if (!isApiConfigured()) {
-    renderErrorView({ app, title: "API not configured", error: new Error("Set apiUrl in site/js/config.js first.") });
+    renderErrorView({ app, title: "API not configured", error: new Error("Set supabaseUrl and supabaseAnonKey in site/js/config.js first.") });
     return;
   }
   if (!app.hasChildNodes()) app.append(el("section", { className: "loading-state", role: "status" }, [el("span", { className: "spinner" }), el("p", { text: "Loading session…" })]));

@@ -41,7 +41,11 @@ globalThis.fetch = async (url, options) => {
 };
 
 const { clearAuthSession, getAuthToken, setAuthSession } = await import("../site/js/authSession.js");
+const { CONFIG } = await import("../site/js/config.js");
 const { list } = await import("../site/js/api.js");
+
+CONFIG.supabaseUrl = "https://supabase.example.test";
+CONFIG.supabaseAnonKey = "anon-key-for-tests";
 
 setAuthSession({
   token: "signed-session-token",
@@ -51,11 +55,11 @@ setAuthSession({
 assert(getAuthToken() === "signed-session-token", "The signed session was not stored for this browser tab.");
 
 await list("teams");
-const requestBody = JSON.parse(capturedRequest.options.body);
-assert(capturedRequest.options.method === "POST", "Protected API reads must use POST.");
-assert(capturedRequest.options.headers["Content-Type"] === "text/plain;charset=utf-8", "Protected API calls use a preflight-triggering content type.");
-assert(requestBody.authToken === "signed-session-token", "The API client did not attach the signed session.");
-assert(requestBody.action === "list" && requestBody.entity === "teams", "The protected list request is malformed.");
+assert(capturedRequest.options.method === "GET", "Protected API reads must use GET for PostgREST.");
+assert(!capturedRequest.options.headers["Content-Type"], "GET requests should not send a JSON content-type header.");
+assert(capturedRequest.options.headers.Accept === "application/json", "Supabase requests should ask for JSON responses.");
+assert(capturedRequest.options.headers.Authorization === "Bearer signed-session-token", "The API client did not attach the signed session as a bearer token.");
+assert(capturedRequest.options.headers.apikey === "anon-key-for-tests", "The Supabase anon key is missing from the request.");
 assert(!capturedRequest.url.includes("signed-session-token"), "The signed session leaked into the request URL.");
 
 clearAuthSession();

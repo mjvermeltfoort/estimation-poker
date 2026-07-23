@@ -1,4 +1,4 @@
-import { getHomeState, list } from "../api.js";
+import { getHomeState } from "../api.js";
 import { getCurrentUser } from "../authSession.js";
 import { isApiConfigured } from "../config.js";
 import { state, setState } from "../state.js";
@@ -56,7 +56,7 @@ function renderHome(app) {
   if (!state.teams.length) {
     content.append(el("div", { className: "empty-state empty-state--compact" }, [
       el("h2", { text: "No teams yet" }),
-      el("p", { text: "Add an active team to the connected Google Sheet first." }),
+      el("p", { text: "Add an active team in Supabase first." }),
     ]));
     app.replaceChildren(header, content);
     return;
@@ -73,7 +73,8 @@ function renderHome(app) {
     setStoredValue(STORAGE_KEYS.selectedTeamId, teamSelect.value);
     renderLoading(app, "Loading sessions…");
     try {
-      const sessions = normalizeList(await list("estimationSessions", { teamId: teamSelect.value }));
+      const homeData = await getHomeState(teamSelect.value);
+      const sessions = normalizeList(homeData?.sessions);
       setState({ sessions, initialLoading: false, error: null });
       renderHome(app);
     } catch (error) {
@@ -121,11 +122,11 @@ export async function renderHomeView({ app, isCurrent = () => true }) {
       el("section", { className: "hero" }, [
         el("p", { className: "eyebrow", text: "Configuration required" }),
         el("h1", { text: "Estimation Poker" }),
-        el("p", { className: "lead", text: "The interface is ready. Set the Google Apps Script /exec URL to load teams and sessions." }),
+        el("p", { className: "lead", text: "The interface is ready. Set Supabase URL and anon key to load teams and sessions." }),
       ]),
       el("section", { className: "empty-state" }, [
         el("h2", { text: "Not connected yet" }),
-        el("p", { text: "Update apiUrl in site/js/config.js. No network requests will be made until then." }),
+        el("p", { text: "Update supabaseUrl and supabaseAnonKey in site/js/config.js. No network requests will be made until then." }),
       ]),
     );
     return;

@@ -8,10 +8,10 @@
 - Use vanilla JavaScript ES modules.
 - Use hash routing.
 - All asset paths must remain relative for GitHub project pages.
-- The Google Apps Script API is the only backend.
+- Supabase is the backend (PostgREST/RPC/Auth) for this project.
 - Keep responsibilities split across small modules and views.
-- Keep the Apps Script `/exec` URL configured only in `site/js/config.js`.
-- Use `text/plain;charset=utf-8` for POST requests to avoid unnecessary CORS preflights.
+- Keep the Supabase URL and anon key configured only in `site/js/config.js`.
+- Use standard JSON requests for Supabase APIs.
 
 ## Security
 
@@ -40,6 +40,6 @@ Before finishing:
 - Check the browser console for errors where possible.
 - Validate `.github/workflows/pages.yml`.
 - Confirm `site/index.html`, `.nojekyll`, CSS and app entrypoint exist.
-- Confirm no asset URL begins with `/` and no frontend POST uses `application/json`.
+- Confirm no asset URL begins with `/` and no secrets are committed to frontend files.
 - Check that hidden votes never render their numeric values before reveal.
 - Keep the working tree clean when committing.

@@ -368,7 +368,7 @@ export async function renderFacilitatorView({
   const sessionId = route.params.sessionId;
   document.title = "Facilitate · Estimation Poker";
   if (!isApiConfigured()) {
-    renderErrorView({ app, title: "API not configured", error: new Error("Set apiUrl in site/js/config.js first.") });
+    renderErrorView({ app, title: "API not configured", error: new Error("Set supabaseUrl and supabaseAnonKey in site/js/config.js first.") });
     return;
   }
   if (!app.hasChildNodes()) app.append(el("section", { className: "loading-state", role: "status" }, [el("span", { className: "spinner" }), el("p", { text: "Loading facilitator screen…" })]));
@@ -377,7 +377,7 @@ export async function renderFacilitatorView({
     if (!isCurrent()) return;
     if (!model) throw new Error("The session was not found or the response is incomplete.");
     if (!model.viewer?.canFacilitate) {
-      throw new Error("Your Google account does not have facilitator permission for this team.");
+      throw new Error("Your signed-in account does not have facilitator permission for this team.");
     }
     const facilitator = { id: model.viewer.memberId, displayName: model.viewer.displayName };
     setStoredValue(STORAGE_KEYS.lastSessionId, sessionId);

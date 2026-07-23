@@ -38,8 +38,8 @@ function updateConfigBanner() {
   strong.textContent = "API configuration is missing. ";
   const text = document.createElement("span");
   text.textContent = !isApiConfigured()
-    ? "Set the Google Apps Script /exec URL as apiUrl in site/js/config.js. No network requests will be made until then."
-    : "Set the Google OAuth web client ID as googleClientId in site/js/config.js.";
+    ? "Set supabaseUrl and supabaseAnonKey in site/js/config.js. No network requests will be made until then."
+    : "Supabase authentication is not configured.";
   configBanner.replaceChildren(strong, text);
 }
 

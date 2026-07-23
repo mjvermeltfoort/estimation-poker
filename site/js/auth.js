@@ -1,60 +1,63 @@
-import { exchangeGoogleCode, getMe } from "./api.js";
+import { getMe, getSupabaseGoogleAuthorizeUrl } from "./api.js";
 import { clearAuthSession, getAuthSession, getCurrentUser, setAuthSession } from "./authSession.js";
-import { CONFIG, isGoogleAuthConfigured } from "./config.js";
+import { isGoogleAuthConfigured } from "./config.js";
 import { el, errorMessage, setBusy } from "./utils.js";
 
-let googleLibraryPromise = null;
+const POST_AUTH_HASH_KEY = "estimationPoker.postAuthHash";
 
-function loadGoogleLibrary() {
-  if (window.google?.accounts?.oauth2) return Promise.resolve();
-  if (googleLibraryPromise) return googleLibraryPromise;
+function parseHashParams(hash) {
+  const source = String(hash || "").startsWith("#") ? String(hash).slice(1) : String(hash || "");
+  const params = new URLSearchParams(source);
+  return {
+    accessToken: params.get("access_token"),
+    refreshToken: params.get("refresh_token"),
+    expiresIn: Number(params.get("expires_in")),
+    tokenType: params.get("token_type"),
+    type: params.get("type"),
+    error: params.get("error"),
+    errorDescription: params.get("error_description"),
+  };
+}
 
-  googleLibraryPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.addEventListener("load", () => resolve(), { once: true });
-    script.addEventListener("error", () => reject(new Error("Google Sign-In could not be loaded.")), { once: true });
-    document.head.append(script);
-  });
-  return googleLibraryPromise;
+function consumeOauthHash() {
+  const parsed = parseHashParams(window.location.hash);
+  if (parsed.error) throw new Error(parsed.errorDescription || parsed.error);
+  if (!parsed.accessToken || parsed.tokenType?.toLowerCase() !== "bearer") return null;
+
+  const expiresAt = Number.isFinite(parsed.expiresIn) && parsed.expiresIn > 0
+    ? Date.now() + (parsed.expiresIn * 1000)
+    : Date.now() + (2 * 60 * 60 * 1000);
+
+  const savedHash = window.sessionStorage.getItem(POST_AUTH_HASH_KEY) || "#/";
+  window.sessionStorage.removeItem(POST_AUTH_HASH_KEY);
+  window.location.hash = savedHash;
+
+  return {
+    token: parsed.accessToken,
+    refreshToken: parsed.refreshToken,
+    expiresAt,
+    user: null,
+  };
 }
 
 export async function signInWithGoogle() {
-  if (!isGoogleAuthConfigured()) throw new Error("The Google OAuth client ID has not been configured.");
-  await loadGoogleLibrary();
-
-  return new Promise((resolve, reject) => {
-    const client = window.google.accounts.oauth2.initCodeClient({
-      client_id: CONFIG.googleClientId,
-      scope: "openid email profile",
-      ux_mode: "popup",
-      prompt: "select_account",
-      callback: async (response) => {
-        if (response.error || !response.code) {
-          reject(new Error(response.error_description || response.error || "Google Sign-In was cancelled."));
-          return;
-        }
-        try {
-          const session = await exchangeGoogleCode(response.code, window.location.origin);
-          setAuthSession(session);
-          resolve(session.user);
-        } catch (error) {
-          reject(error);
-        }
-      },
-      error_callback: (error) => {
-        reject(new Error(error?.type === "popup_closed"
-          ? "The Google Sign-In window was closed."
-          : "Google Sign-In could not be opened."));
-      },
-    });
-    client.requestCode();
-  });
+  if (!isGoogleAuthConfigured()) throw new Error("Supabase has not been configured.");
+  window.sessionStorage.setItem(POST_AUTH_HASH_KEY, window.location.hash || "#/");
+  const redirectTo = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+  window.location.assign(getSupabaseGoogleAuthorizeUrl(redirectTo));
 }
 
 export async function restoreAuthenticatedUser() {
+  try {
+    const oauthSession = consumeOauthHash();
+    if (oauthSession) setAuthSession(oauthSession);
+  } catch (error) {
+    clearAuthSession();
+    window.sessionStorage.removeItem(POST_AUTH_HASH_KEY);
+    window.location.hash = "#/";
+    return null;
+  }
+
   if (!getAuthSession()) return null;
   try {
     const user = await getMe();
@@ -110,7 +113,7 @@ export function renderSignInView(app) {
   });
 
   const configurationMessage = !isGoogleAuthConfigured()
-    ? el("p", { className: "inline-warning", text: "Set googleClientId in site/js/config.js before signing in." })
+    ? el("p", { className: "inline-warning", text: "Set supabaseUrl and supabaseAnonKey in site/js/config.js before signing in." })
     : null;
   app.replaceChildren(el("section", { className: "signin-card panel" }, [
     el("p", { className: "eyebrow", text: "Secure team access" }),

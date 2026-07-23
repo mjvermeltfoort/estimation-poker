@@ -46,15 +46,19 @@ const sorted = sortTickets([{ id: "late", sortOrder: 2 }, { id: "first", sortOrd
 assert(sorted[0].id === "first", "Tickets are not sorted by sortOrder.");
 assert(statusLabel("voting") === "Voting", "Status label is incorrect.");
 const expectedConfiguredState = Boolean(
-  CONFIG.apiUrl
-    && !CONFIG.apiUrl.includes("PASTE_HERE")
-    && /^https:\/\//i.test(CONFIG.apiUrl),
+  CONFIG.supabaseUrl
+    && !CONFIG.supabaseUrl.includes("PASTE_HERE")
+    && /^https:\/\//i.test(CONFIG.supabaseUrl)
+    && CONFIG.supabaseAnonKey
+    && !CONFIG.supabaseAnonKey.includes("PASTE_HERE"),
 );
 assert(isApiConfigured() === expectedConfiguredState, "API configuration status is incorrect.");
 const expectedGoogleAuthState = Boolean(
-  CONFIG.googleClientId
-    && !CONFIG.googleClientId.includes("PASTE_HERE")
-    && CONFIG.googleClientId.endsWith(".apps.googleusercontent.com"),
+  CONFIG.supabaseUrl
+    && !CONFIG.supabaseUrl.includes("PASTE_HERE")
+    && /^https:\/\//i.test(CONFIG.supabaseUrl)
+    && CONFIG.supabaseAnonKey
+    && !CONFIG.supabaseAnonKey.includes("PASTE_HERE"),
 );
 assert(isGoogleAuthConfigured() === expectedGoogleAuthState, "Google authentication configuration status is incorrect.");
 

@@ -11,165 +11,301 @@ export class ApiError extends Error {
   }
 }
 
+const ENTITY_TABLES = {
+  teams: "teams",
+  teamMembers: "team_members",
+  estimationSessions: "estimation_sessions",
+  estimationTickets: "estimation_tickets",
+  votes: "votes",
+};
+
+function toSnakeKey(key) {
+  return String(key).replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+}
+
+function toCamelKey(key) {
+  return String(key).replace(/_([a-z])/g, (_, char) => char.toUpperCase());
+}
+
+function mapObjectKeys(value, mapper) {
+  if (Array.isArray(value)) return value.map((item) => mapObjectKeys(item, mapper));
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).map(([key, inner]) => [mapper(key), mapObjectKeys(inner, mapper)]));
+}
+
+function toDatabase(value) {
+  return mapObjectKeys(value, toSnakeKey);
+}
+
+function toClient(value) {
+  return mapObjectKeys(value, toCamelKey);
+}
+
 function configuredUrl() {
   if (!isApiConfigured()) {
     throw new ApiError(
-      "The Google Apps Script API has not been configured yet.",
+      "Supabase has not been configured yet.",
       "NOT_CONFIGURED",
     );
   }
 
   try {
-    return new URL(CONFIG.apiUrl);
+    return new URL(CONFIG.supabaseUrl);
   } catch (error) {
-    throw new ApiError("The configured API URL is invalid.", "INVALID_CONFIG", 0, error);
+    throw new ApiError("The configured Supabase URL is invalid.", "INVALID_CONFIG", 0, error);
   }
 }
 
-function createUrl(params) {
-  const url = configuredUrl();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") {
-      url.searchParams.set(key, String(value));
-    }
-  });
-  return url;
+function headers({ authenticated = true, contentType = "application/json" } = {}) {
+  const base = {
+    apikey: CONFIG.supabaseAnonKey,
+  };
+  if (contentType) base["Content-Type"] = contentType;
+
+  if (!authenticated) return base;
+
+  const authToken = getAuthToken();
+  if (!authToken) throw new ApiError("Sign in to continue.", "AUTH_REQUIRED", 401);
+  base.Authorization = `Bearer ${authToken}`;
+  return base;
 }
 
-async function parseResponse(response) {
-  let payload;
-  try {
-    const text = await response.text();
-    if (!text.trim()) {
-      throw new ApiError("The server returned an empty response.", "EMPTY_RESPONSE", response.status);
+function isObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeSupabaseError(status, payload) {
+  const code = payload?.code || payload?.error_code || "HTTP_ERROR";
+  const message = payload?.message || payload?.error_description || `The server responded with status ${status}.`;
+  return new ApiError(message, code, status, payload);
+}
+
+async function parseJsonResponse(response) {
+  const text = await response.text();
+  let payload = null;
+  if (text.trim()) {
+    try {
+      payload = JSON.parse(text);
+    } catch (error) {
+      throw new ApiError("The server did not return valid JSON.", "INVALID_JSON", response.status, error);
     }
-    payload = JSON.parse(text);
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    throw new ApiError("The server did not return valid JSON.", "INVALID_JSON", response.status, error);
   }
 
   if (!response.ok) {
-    throw new ApiError(
-      payload?.error?.message || payload?.message || `The server responded with status ${response.status}.`,
-      payload?.error?.code || "HTTP_ERROR",
-      response.status,
-      payload?.error?.details || payload,
-    );
+    throw normalizeSupabaseError(response.status, payload);
   }
 
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new ApiError("The server response has an unexpected format.", "INVALID_RESPONSE", response.status);
-  }
-  if (payload.ok === false) {
-    const error = new ApiError(
-      payload.error?.message || payload.message || "The server rejected the operation.",
-      payload.error?.code || payload.code || "API_ERROR",
-      payload.error?.status || response.status,
-      payload.error?.details || payload.details || null,
-    );
-    if (error.status === 401 || ["AUTH_REQUIRED", "INVALID_SESSION", "SESSION_EXPIRED"].includes(error.code)) {
-      clearAuthSession();
-    }
-    throw error;
-  }
-  if (payload.ok !== true || !("data" in payload)) {
-    throw new ApiError("The server response is missing required fields.", "INVALID_RESPONSE", response.status, payload);
-  }
-  return payload.data;
+  return payload;
 }
 
-async function request({ method = "POST", params = {}, payload = null, authenticated = true }) {
+async function request(path, {
+  method = "GET",
+  authenticated = true,
+  body = null,
+  query = {},
+  accept = "application/json",
+  contentType = "application/json",
+} = {}) {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), CONFIG.requestTimeoutMs);
 
   try {
-    const options = { method, signal: controller.signal };
-    let url = configuredUrl();
-    if (method === "GET") {
-      url = createUrl(params);
-    } else {
-      const body = { ...(payload || {}) };
-      if (authenticated) {
-        const authToken = getAuthToken();
-        if (!authToken) throw new ApiError("Sign in to continue.", "AUTH_REQUIRED", 401);
-        body.authToken = authToken;
+    const baseUrl = configuredUrl();
+    const url = new URL(path, `${baseUrl.toString().replace(/\/$/, "")}/`);
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        url.searchParams.set(key, String(value));
       }
-      options.headers = { "Content-Type": "text/plain;charset=utf-8" };
-      options.body = JSON.stringify(body);
-    }
-    const response = await fetch(url, options);
-    return await parseResponse(response);
+    });
+
+    const requestHeaders = {
+      ...headers({ authenticated, contentType }),
+      Accept: accept,
+      Prefer: "return=representation",
+    };
+
+    const response = await fetch(url, {
+      method,
+      headers: requestHeaders,
+      body: body === null ? null : JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    return await parseJsonResponse(response);
   } catch (error) {
     if (error instanceof ApiError) {
-      console.error("API error", error);
+      if (error.status === 401 || ["invalid_token", "JWT_INVALID"].includes(error.code)) {
+        clearAuthSession();
+      }
       throw error;
     }
-    const apiError = error?.name === "AbortError"
-      ? new ApiError("The request timed out. Please try again.", "TIMEOUT")
-      : new ApiError("Could not connect to the API. Check your network connection and the Apps Script deployment.", "NETWORK_ERROR", 0, error);
-    console.error("API error", apiError);
-    throw apiError;
+
+    if (error?.name === "AbortError") {
+      throw new ApiError("The request timed out. Please try again.", "TIMEOUT");
+    }
+
+    throw new ApiError("Could not connect to Supabase. Check your network connection and configuration.", "NETWORK_ERROR", 0, error);
   } finally {
     window.clearTimeout(timeoutId);
   }
 }
 
-export function getHealth() {
-  return request({ method: "GET", params: { action: "health" }, authenticated: false });
+function resolveTable(entity) {
+  const table = ENTITY_TABLES[entity];
+  if (!table) throw new ApiError(`Unknown entity: ${entity}`, "UNKNOWN_ENTITY", 400);
+  return table;
 }
 
-export function exchangeGoogleCode(code, redirectOrigin) {
-  return request({
-    payload: { action: "authenticate", code, redirectOrigin },
-    authenticated: false,
+function toPostgrestFilter(query, filters = {}) {
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    query[toSnakeKey(key)] = `eq.${value}`;
   });
+  return query;
 }
 
-export function getMe() {
-  return request({ payload: { action: "me" } });
+function normalizeList(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function unwrapSingle(payload, entity) {
+  if (!Array.isArray(payload)) {
+    throw new ApiError(`Unexpected ${entity} response shape.`, "INVALID_RESPONSE", 500, payload);
+  }
+  if (!payload.length) throw new ApiError("The requested record was not found.", "NOT_FOUND", 404);
+  return payload[0];
+}
+
+function getUserIdentity(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    displayName: user.display_name || user.user_metadata?.full_name || user.email,
+    memberships: normalizeList(user.memberships),
+  };
+}
+
+async function rpc(functionName, params = {}, { authenticated = true } = {}) {
+  const payload = await request(`rest/v1/rpc/${functionName}`, {
+    method: "POST",
+    authenticated,
+    body: params,
+  });
+  return payload;
+}
+
+export function getHealth() {
+  return request("rest/v1/", { method: "GET", authenticated: false }).then(() => ({ apiVersion: "supabase", timestamp: new Date().toISOString() }));
+}
+
+export function exchangeGoogleCode() {
+  throw new ApiError("Code-exchange sign-in is no longer used. Use Supabase redirect sign-in.", "UNSUPPORTED_FLOW", 400);
+}
+
+export async function getMe() {
+  const payload = await rpc("me", {}, { authenticated: true });
+  if (!payload || !isObject(payload)) {
+    throw new ApiError("The user profile response has an unexpected format.", "INVALID_RESPONSE", 500, payload);
+  }
+  return getUserIdentity(payload);
 }
 
 export function getHomeState(teamId = null) {
-  return request({ payload: { action: "homeState", teamId } });
+  return rpc("home_state", { p_team_id: teamId || null }).then(toClient);
 }
 
-export function list(entity, filters = {}) {
-  return request({ payload: { action: "list", entity, filters } });
+export async function list(entity, filters = {}) {
+  if (entity === "votes") {
+    throw new ApiError("Votes cannot be listed directly.", "PROTECTED_ENTITY", 403);
+  }
+  const table = resolveTable(entity);
+  const query = toPostgrestFilter({}, filters);
+  query.select = "*";
+  const payload = await request(`rest/v1/${table}`, {
+    method: "GET",
+    authenticated: true,
+    query,
+    contentType: null,
+  });
+  return normalizeList(toClient(payload));
 }
 
-export function get(entity, id) {
-  return request({ payload: { action: "get", entity, id } });
+export async function get(entity, id) {
+  if (entity === "votes") {
+    throw new ApiError("Votes cannot be fetched directly.", "PROTECTED_ENTITY", 403);
+  }
+  const table = resolveTable(entity);
+  const payload = await request(`rest/v1/${table}`, {
+    method: "GET",
+    authenticated: true,
+    query: { select: "*", id: `eq.${id}`, limit: 1 },
+    contentType: null,
+  });
+  return toClient(unwrapSingle(payload, entity));
 }
 
-export function create(entity, data, { includeSessionState = false } = {}) {
-  return request({ method: "POST", payload: { action: "create", entity, data, includeSessionState } });
+export async function create(entity, data) {
+  const table = resolveTable(entity);
+  const payload = await request(`rest/v1/${table}`, {
+    method: "POST",
+    authenticated: true,
+    body: toDatabase(data),
+    query: { select: "*" },
+  });
+  return toClient(Array.isArray(payload) ? payload[0] : payload);
 }
 
-export function update(entity, id, data, { includeSessionState = false } = {}) {
-  return request({ method: "POST", payload: { action: "update", entity, id, data, includeSessionState } });
+export async function update(entity, id, data) {
+  const table = resolveTable(entity);
+  const payload = await request(`rest/v1/${table}`, {
+    method: "PATCH",
+    authenticated: true,
+    body: toDatabase(data),
+    query: { id: `eq.${id}`, select: "*" },
+  });
+  return toClient(Array.isArray(payload) ? payload[0] : payload);
 }
 
-export function remove(entity, id, { includeSessionState = false } = {}) {
-  return request({ method: "POST", payload: { action: "delete", entity, id, includeSessionState } });
+export async function remove(entity, id) {
+  const table = resolveTable(entity);
+  const payload = await request(`rest/v1/${table}`, {
+    method: "DELETE",
+    authenticated: true,
+    query: { id: `eq.${id}`, select: "*" },
+    contentType: null,
+  });
+  return toClient(Array.isArray(payload) ? payload[0] : payload);
 }
 
 export function getSessionState(sessionId) {
-  return request({ payload: { action: "sessionState", sessionId } });
+  return rpc("session_state", { p_session_id: sessionId }).then(toClient);
 }
 
 export function activateTicket(sessionId, ticketId) {
-  return request({ method: "POST", payload: { action: "activateTicket", sessionId, ticketId } });
+  return rpc("activate_ticket", { p_session_id: sessionId, p_ticket_id: ticketId }).then(toClient);
 }
 
 export function submitVote(payload) {
-  return request({ method: "POST", payload: { action: "submitVote", ...payload } });
+  return rpc("submit_vote", {
+    p_session_id: payload.sessionId,
+    p_ticket_id: payload.ticketId,
+    p_round_number: payload.roundNumber,
+    p_estimate_hours: payload.estimateHours,
+  }).then(toClient);
 }
 
-export function revealTicket(ticketId, roundNumber, { includeSessionState = false } = {}) {
-  return request({ method: "POST", payload: { action: "revealTicket", ticketId, roundNumber, includeSessionState } });
+export function revealTicket(ticketId, roundNumber) {
+  return rpc("reveal_ticket", { p_ticket_id: ticketId, p_round_number: roundNumber }).then(toClient);
 }
 
-export function finalizeTicket(ticketId, finalEstimateHours, { includeSessionState = false } = {}) {
-  return request({ method: "POST", payload: { action: "finalizeTicket", ticketId, finalEstimateHours, includeSessionState } });
+export function finalizeTicket(ticketId, finalEstimateHours) {
+  return rpc("finalize_ticket", { p_ticket_id: ticketId, p_final_estimate_hours: finalEstimateHours }).then(toClient);
+}
+
+export function getSupabaseGoogleAuthorizeUrl(redirectTo) {
+  const baseUrl = configuredUrl();
+  const url = new URL("auth/v1/authorize", `${baseUrl.toString().replace(/\/$/, "")}/`);
+  url.searchParams.set("provider", "google");
+  url.searchParams.set("redirect_to", redirectTo);
+  return url.toString();
 }

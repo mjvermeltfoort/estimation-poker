@@ -31,7 +31,7 @@ function addField(form, { id, label, type = "text", required = false, placeholde
 export async function renderCreateSessionView({ app, isCurrent = () => true }) {
   document.title = "New session · Estimation Poker";
   if (!isApiConfigured()) {
-    renderErrorView({ app, title: "API not configured", error: new Error("Set apiUrl in site/js/config.js first.") });
+    renderErrorView({ app, title: "API not configured", error: new Error("Set supabaseUrl and supabaseAnonKey in site/js/config.js first.") });
     return;
   }
   app.replaceChildren(el("section", { className: "loading-state", role: "status" }, [el("span", { className: "spinner" }), el("p", { text: "Loading form…" })]));
@@ -47,7 +47,7 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
     if (!teams.length) {
       app.replaceChildren(el("section", { className: "empty-state" }, [
         el("h1", { text: "Facilitator access required" }),
-        el("p", { text: "Your Google account is not registered as a facilitator for an active team." }),
+        el("p", { text: "Your signed-in account is not registered as a facilitator for an active team." }),
         el("a", { className: "button button--secondary", href: "#/", text: "Back" }),
       ]));
       return;
@@ -70,7 +70,7 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
     form.append(el("div", { className: "field" }, [
       el("span", { className: "field-label", text: "Facilitator" }),
       facilitatorName,
-      el("p", { className: "muted", text: "Verified from your Google account." }),
+        el("p", { className: "muted", text: "Verified from your signed-in account." }),
     ]));
 
     const divider = el("div", { className: "form-divider field--wide" }, [
