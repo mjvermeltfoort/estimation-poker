@@ -6,7 +6,7 @@ import { getStoredValue, setStoredValue, STORAGE_KEYS } from "../storage.js";
 import { el, errorMessage, normalizeList, setBusy } from "../utils.js";
 import { renderErrorView } from "./errorView.js";
 
-const DEFAULT_ROLES = ["participant", "facilitator", "admin"];
+const DEFAULT_ROLES = ["member", "facilitator", "admin"];
 
 function isAdminMembership(membership) {
   return membership && membership.role === "admin" && membership.active !== false;
@@ -127,7 +127,7 @@ function renderTeamMembersSection(adminState, teamId, refresh) {
   const addForm = el("form", { className: "panel form-grid", noValidate: true });
   const nameInput = el("input", { id: "admin-display-name", placeholder: "Name (optional)" });
   const emailInput = el("input", { id: "admin-email", placeholder: "Email", type: "email", required: true });
-  const roleSelect = buildRoleSelect("participant", roles, false);
+  const roleSelect = buildRoleSelect("member", roles, false);
   roleSelect.id = "admin-role";
   const submit = el("button", { className: "button button--primary", type: "submit", text: "Add user" });
   const emailError = el("p", { className: "field-error" });
@@ -154,7 +154,7 @@ function renderTeamMembersSection(adminState, teamId, refresh) {
         teamId,
         email,
         displayName: nameInput.value.trim(),
-        role: normalizeRole(roleSelect.value) || "participant",
+        role: normalizeRole(roleSelect.value) || "member",
         active: true,
       });
       showToast("User saved", "success");
