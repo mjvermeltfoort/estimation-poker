@@ -1,6 +1,7 @@
 export const STORAGE_KEYS = {
   selectedTeamId: "estimationPoker.selectedTeamId",
   lastSessionId: "estimationPoker.lastSessionId",
+  facilitatorProjectByTeam: "estimationPoker.facilitatorProjectByTeam",
 };
 
 function resolveStorage(kind) {

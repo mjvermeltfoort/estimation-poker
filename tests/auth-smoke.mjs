@@ -66,7 +66,8 @@ assert(capturedRequest.options.body === JSON.stringify({ p_team_id: "team-123", 
 
 await createEstimationTicket({
   sessionId: "session-456",
-  jiraIssueKey: "ABC-123",
+  projectId: "project-789",
+  ticketNumber: "123",
   summary: "Implement RPC flow",
   description: "Replace direct table writes.",
   status: "pending",
@@ -76,7 +77,8 @@ await createEstimationTicket({
 assert(capturedRequest.url.includes("rest/v1/rpc/create_estimation_ticket"), "Ticket creation must go through the create_estimation_ticket RPC.");
 assert(capturedRequest.options.body === JSON.stringify({
   p_session_id: "session-456",
-  p_jira_issue_key: "ABC-123",
+  p_project_id: "project-789",
+  p_ticket_number: "123",
   p_summary: "Implement RPC flow",
   p_description: "Replace direct table writes.",
   p_status: "pending",

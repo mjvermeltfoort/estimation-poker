@@ -188,6 +188,34 @@ export function getAdminState(teamId = null) {
   return rpc("admin_state", { p_team_id: teamId || null }).then(toClient);
 }
 
+export function getAdminTeamSettings(teamId) {
+  return rpc("admin_get_team_settings", { p_team_id: teamId }).then(toClient);
+}
+
+export function updateAdminTeamSettings({ teamId, jiraBaseUrl }) {
+  return rpc("admin_update_team_settings", {
+    p_team_id: teamId,
+    p_jira_base_url: jiraBaseUrl,
+  }).then(toClient);
+}
+
+export function getProjectsState(teamId, includeArchived = false) {
+  return rpc("projects_state", {
+    p_team_id: teamId,
+    p_include_archived: Boolean(includeArchived),
+  }).then(toClient);
+}
+
+export function upsertProject({ teamId, name, jiraProjectKey, projectId = null, isArchived = false }) {
+  return rpc("upsert_project", {
+    p_team_id: teamId,
+    p_name: name,
+    p_jira_project_key: jiraProjectKey,
+    p_project_id: projectId,
+    p_is_archived: Boolean(isArchived),
+  }).then(toClient);
+}
+
 export function adminUpsertTeamMember({ teamId, email, displayName, role, active = true }) {
   return rpc("admin_upsert_team_member", {
     p_team_id: teamId,
@@ -218,10 +246,11 @@ export function createSession({ teamId, name }) {
   }).then(toClient);
 }
 
-export function createEstimationTicket({ sessionId, jiraIssueKey, summary, description = "", status = "pending", sortOrder = 1, createdAt = null }) {
+export function createEstimationTicket({ sessionId, projectId, ticketNumber, summary, description = "", status = "pending", sortOrder = 1, createdAt = null }) {
   return rpc("create_estimation_ticket", {
     p_session_id: sessionId,
-    p_jira_issue_key: jiraIssueKey,
+    p_project_id: projectId,
+    p_ticket_number: ticketNumber,
     p_summary: summary,
     p_description: description,
     p_status: status,

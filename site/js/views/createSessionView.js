@@ -1,4 +1,4 @@
-import { createEstimationTicket, createSession, getHomeState } from "../api.js";
+import { createEstimationTicket, createSession, getHomeState, getProjectsState, upsertProject } from "../api.js";
 import { getCurrentUser } from "../authSession.js";
 import { isApiConfigured } from "../config.js";
 import { navigateTo } from "../router.js";
@@ -70,6 +70,20 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
     const teamError = el("p", { className: "field-error", id: "teamId-error" });
     form.append(el("div", { className: "field" }, [el("label", { htmlFor: "teamId", text: "Team *" }), teamSelect, teamError]));
 
+    const projectSelect = el("select", { id: "projectId", name: "projectId", required: true });
+    const projectError = el("p", { className: "field-error", id: "projectId-error" });
+    form.append(el("div", { className: "field" }, [el("label", { htmlFor: "projectId", text: "Project *" }), projectSelect, projectError]));
+
+    const quickProjectName = el("input", { id: "quickProjectName", placeholder: "New project name" });
+    const quickProjectKey = el("input", { id: "quickProjectKey", placeholder: "New Jira project key (e.g. APP)" });
+    const quickProjectError = el("p", { className: "field-error", id: "quickProject-error" });
+    const quickProjectButton = el("button", { className: "button button--secondary", type: "button", text: "Create project" });
+    form.append(el("div", { className: "field field--wide" }, [
+      el("label", { htmlFor: "quickProjectName", text: "Quick create project" }),
+      el("div", { className: "button-row" }, [quickProjectName, quickProjectKey, quickProjectButton]),
+      quickProjectError,
+    ]));
+
     const name = addField(form, { id: "sessionName", label: "Session name", required: true, placeholder: "For example, Sprint 18 refinement" });
     const facilitatorName = el("p", { className: "readonly-value", text: currentUser?.displayName || currentUser?.email || "Signed-in facilitator" });
     form.append(el("div", { className: "field" }, [
@@ -83,7 +97,7 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
       el("p", { className: "muted", text: "You can add more tickets later from the facilitator screen." }),
     ]);
     form.append(divider);
-    const jiraKey = addField(form, { id: "jiraIssueKey", label: "Jira key", placeholder: "ABC-123" });
+    const jiraKey = addField(form, { id: "jiraIssueKey", label: "Ticket number", placeholder: "123" });
     const summary = addField(form, { id: "summary", label: "Ticket title", placeholder: "Add validation to the customer form" });
     const description = addField(form, { id: "description", label: "Description", multiline: true });
     description.input.closest(".field").classList.add("field--wide");
@@ -93,17 +107,76 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
     section.append(form);
     app.replaceChildren(section);
 
+    async function loadProjectsForTeam(teamId, preferredProjectId = null) {
+      projectSelect.replaceChildren();
+      projectSelect.append(el("option", { value: "", text: "Loading projects…", selected: true }));
+      const state = await getProjectsState(teamId, false);
+      const projects = normalizeList(state?.projects).filter(isActive);
+      projectSelect.replaceChildren();
+      if (!projects.length) {
+        projectSelect.append(el("option", { value: "", text: "No active project", selected: true }));
+        return;
+      }
+      const selected = preferredProjectId && projects.some((project) => String(project.id) === String(preferredProjectId))
+        ? String(preferredProjectId)
+        : String(projects[0].id);
+      projects.forEach((project) => projectSelect.append(el("option", {
+        value: project.id,
+        text: `${project.name} (${project.jiraProjectKey})`,
+        selected: String(project.id) === selected,
+      })));
+    }
+
+    await loadProjectsForTeam(teamSelect.value);
+
+    teamSelect.addEventListener("change", async () => {
+      projectError.textContent = "";
+      try {
+        await loadProjectsForTeam(teamSelect.value);
+      } catch (error) {
+        projectError.textContent = errorMessage(error);
+      }
+    });
+
+    quickProjectButton.addEventListener("click", async () => {
+      quickProjectError.textContent = "";
+      const projectName = quickProjectName.value.trim();
+      const projectKey = quickProjectKey.value.trim().toUpperCase();
+      quickProjectKey.value = projectKey;
+      if (!projectName || !projectKey) {
+        quickProjectError.textContent = "Enter both a project name and Jira key.";
+        return;
+      }
+      setBusy(quickProjectButton, true, "Creating…");
+      try {
+        const result = await upsertProject({
+          teamId: teamSelect.value,
+          name: projectName,
+          jiraProjectKey: projectKey,
+          isArchived: false,
+        });
+        await loadProjectsForTeam(teamSelect.value, result?.project?.id || null);
+        quickProjectName.value = "";
+        quickProjectKey.value = "";
+        showToast("Project created", "success");
+      } catch (error) {
+        quickProjectError.textContent = errorMessage(error);
+        setBusy(quickProjectButton, false);
+      }
+    });
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      [teamError, name.error, jiraKey.error, summary.error].forEach((node) => { node.textContent = ""; });
+      [teamError, projectError, quickProjectError, name.error, jiraKey.error, summary.error].forEach((node) => { node.textContent = ""; });
       const normalizedKey = jiraKey.input.value.trim().toUpperCase();
       jiraKey.input.value = normalizedKey;
       let valid = true;
       if (!teamSelect.value) { teamError.textContent = "Select a team."; valid = false; }
       if (teamSelect.value && !isUuid(teamSelect.value)) { teamError.textContent = "Select a valid team."; valid = false; }
+      if (!projectSelect.value) { projectError.textContent = "Select a project."; valid = false; }
       if (!name.input.value.trim()) { name.error.textContent = "Enter a session name."; valid = false; }
-      if (normalizedKey && !summary.input.value.trim()) { summary.error.textContent = "A title is required when you enter a Jira key."; valid = false; }
-      if (!normalizedKey && summary.input.value.trim()) { jiraKey.error.textContent = "A Jira key is required when you add a ticket."; valid = false; }
+      if (normalizedKey && !summary.input.value.trim()) { summary.error.textContent = "A title is required when you enter a ticket number."; valid = false; }
+      if (!normalizedKey && summary.input.value.trim()) { jiraKey.error.textContent = "A ticket number is required when you add a ticket."; valid = false; }
       if (!valid) return;
 
       setBusy(submit, true, "Creating…");
@@ -120,7 +193,8 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
           try {
             await createEstimationTicket({
               sessionId: session.id,
-              jiraIssueKey: normalizedKey,
+              projectId: projectSelect.value,
+              ticketNumber: normalizedKey,
               summary: summary.input.value.trim(),
               description: description.input.value.trim(),
               status: "pending",

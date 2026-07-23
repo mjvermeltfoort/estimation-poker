@@ -106,12 +106,15 @@ function renderSession(app, model, viewer, roundNumber, context) {
       ticketPanel.append(results);
     }
   } else {
-    const jiraUrl = safeJiraUrl(model.team?.jiraBaseUrl || model.session.team?.jiraBaseUrl, ticket.jiraIssueKey);
+    const jiraUrl = ticket.jiraBrowseUrl || safeJiraUrl(model.team?.jiraBaseUrl || model.session.team?.jiraBaseUrl, ticket.jiraIssueKey);
     const key = jiraUrl
       ? el("a", { className: "ticket-key", href: jiraUrl.toString(), target: "_blank", rel: "noopener noreferrer", text: ticket.jiraIssueKey || "Ticket" })
       : el("span", { className: "ticket-key", text: ticket.jiraIssueKey || "Ticket" });
     ticketPanel.append(
       el("div", { className: "ticket-heading" }, [el("div", {}, [key, el("h2", { text: ticket.summary || "No title" })]), statusBadge(ticket.status)]),
+      ticket.projectName
+        ? el("p", { className: "muted", text: `Project: ${ticket.projectName} (${ticket.projectKey || ""})` })
+        : null,
       ticket.description ? el("p", { className: "ticket-description", text: ticket.description }) : el("p", { className: "muted", text: "No description." }),
     );
 
