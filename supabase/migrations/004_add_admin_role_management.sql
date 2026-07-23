@@ -1,6 +1,44 @@
 -- Add admin role support with secure RPCs for user and role management.
 
-alter type public.citation_role add value if not exists 'admin';
+do $$
+declare
+  v_role_type_oid oid;
+  v_role_type_schema text;
+  v_role_type_name text;
+  v_role_type_kind "char";
+begin
+  select
+    a.atttypid,
+    tn.nspname,
+    t.typname,
+    t.typtype
+  into
+    v_role_type_oid,
+    v_role_type_schema,
+    v_role_type_name,
+    v_role_type_kind
+  from pg_catalog.pg_attribute a
+  join pg_catalog.pg_class c on c.oid = a.attrelid
+  join pg_catalog.pg_namespace cn on cn.oid = c.relnamespace
+  join pg_catalog.pg_type t on t.oid = a.atttypid
+  join pg_catalog.pg_namespace tn on tn.oid = t.typnamespace
+  where cn.nspname = 'public'
+    and c.relname = 'team_members'
+    and a.attname = 'role'
+    and a.attnum > 0
+    and not a.attisdropped
+  limit 1;
+
+  if v_role_type_kind = 'e' and not exists (
+    select 1
+    from pg_catalog.pg_enum e
+    where e.enumtypid = v_role_type_oid
+      and e.enumlabel = 'admin'
+  ) then
+    execute format('alter type %I.%I add value %L', v_role_type_schema, v_role_type_name, 'admin');
+  end if;
+end;
+$$;
 
 create or replace function public.current_admin_for_team(p_team_id uuid)
 returns uuid
@@ -52,6 +90,8 @@ declare
   v_teams jsonb := '[]'::jsonb;
   v_members jsonb := '[]'::jsonb;
   v_available_roles jsonb := '[]'::jsonb;
+  v_role_type_oid oid;
+  v_role_type_kind "char";
 begin
   select coalesce(
     jsonb_agg(
@@ -127,14 +167,45 @@ begin
   from public.team_members tm
   where tm.team_id = v_selected_team_id;
 
-  select coalesce(
-    jsonb_agg(enumlabel order by enumsortorder),
-    jsonb_build_array('participant', 'facilitator', 'admin')
-  )
-  into v_available_roles
-  from pg_enum e
-  join pg_type t on t.oid = e.enumtypid
-  where t.typname = 'citation_role';
+  select
+    a.atttypid,
+    t.typtype
+  into
+    v_role_type_oid,
+    v_role_type_kind
+  from pg_catalog.pg_attribute a
+  join pg_catalog.pg_class c on c.oid = a.attrelid
+  join pg_catalog.pg_namespace cn on cn.oid = c.relnamespace
+  join pg_catalog.pg_type t on t.oid = a.atttypid
+  where cn.nspname = 'public'
+    and c.relname = 'team_members'
+    and a.attname = 'role'
+    and a.attnum > 0
+    and not a.attisdropped
+  limit 1;
+
+  if v_role_type_kind = 'e' then
+    select coalesce(
+      jsonb_agg(e.enumlabel order by e.enumsortorder),
+      jsonb_build_array('participant', 'facilitator', 'admin')
+    )
+    into v_available_roles
+    from pg_catalog.pg_enum e
+    where e.enumtypid = v_role_type_oid;
+  else
+    select coalesce(
+      jsonb_agg(role_name order by role_name),
+      jsonb_build_array('participant', 'facilitator', 'admin')
+    )
+    into v_available_roles
+    from (
+      select distinct lower(tm.role::text) as role_name
+      from public.team_members tm
+      where tm.role is not null
+      union
+      select unnest(array['participant', 'facilitator', 'admin'])
+    ) roles;
+  end if;
 
   return jsonb_build_object(
     'teams', v_teams,
@@ -159,7 +230,7 @@ set search_path = public
 as $$
 declare
   v_existing public.team_members;
-  v_role public.citation_role;
+  v_role public.team_members.role%type;
   v_user_id uuid;
   v_email text;
 begin
@@ -170,7 +241,7 @@ begin
     raise exception 'VALIDATION: email is required';
   end if;
 
-  v_role := coalesce(nullif(trim(coalesce(p_role, '')), ''), 'participant')::public.citation_role;
+  v_role := coalesce(nullif(trim(coalesce(p_role, '')), ''), 'participant')::public.team_members.role%type;
 
   select u.id
   into v_user_id
@@ -239,7 +310,7 @@ set search_path = public
 as $$
 declare
   v_target public.team_members;
-  v_role public.citation_role;
+  v_role public.team_members.role%type;
   v_remove_admin boolean := false;
   v_other_admin_count integer := 0;
 begin
@@ -256,7 +327,7 @@ begin
   perform public.assert_team_admin(v_target.team_id);
 
   if p_role is not null then
-    v_role := nullif(trim(p_role), '')::public.citation_role;
+    v_role := nullif(trim(p_role), '')::public.team_members.role%type;
   else
     v_role := v_target.role;
   end if;
