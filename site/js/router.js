@@ -1,6 +1,7 @@
 const ROUTES = [
   { name: "home", pattern: /^\/$/ },
   { name: "create-session", pattern: /^\/sessions\/new$/ },
+  { name: "projects", pattern: /^\/projects$/ },
   { name: "admin", pattern: /^\/admin$/ },
   { name: "admin-settings", pattern: /^\/admin\/settings$/ },
   { name: "session", pattern: /^\/session\/([^/]+)$/ , params: ["sessionId"] },

@@ -12,6 +12,7 @@ import { renderNotFoundView } from "./views/notFoundView.js";
 import { renderSessionView } from "./views/sessionView.js";
 import { renderAdminView } from "./views/adminView.js";
 import { renderAdminSettingsView } from "./views/adminSettingsView.js";
+import { renderProjectsView } from "./views/projectsView.js";
 
 const app = document.querySelector("#app");
 const configBanner = document.querySelector("#config-banner");
@@ -24,12 +25,15 @@ function updateNavigation(route) {
   const canAdmin = Boolean(getCurrentUser()?.memberships?.some((membership) => membership.role === "admin"));
   document.querySelectorAll("[data-nav]").forEach((link) => {
     if (link.dataset.nav === "create") link.hidden = !canCreate;
+    if (link.dataset.nav === "projects") link.hidden = !canCreate;
     if (link.dataset.nav === "admin") link.hidden = !canAdmin;
     if (link.dataset.nav === "admin-settings") link.hidden = !canAdmin;
     const activeNav = route.name === "home"
       ? "home"
       : route.name === "create-session"
         ? "create"
+        : route.name === "projects"
+          ? "projects"
         : route.name === "admin"
           ? "admin"
           : route.name === "admin-settings"
@@ -79,6 +83,7 @@ async function routeToView(route, generation, {
     switch (route.name) {
       case "home": await renderHomeView(context); break;
       case "create-session": await renderCreateSessionView(context); break;
+      case "projects": await renderProjectsView(context); break;
       case "admin": await renderAdminView(context); break;
       case "admin-settings": await renderAdminSettingsView(context); break;
       case "session": await renderSessionView(context); break;

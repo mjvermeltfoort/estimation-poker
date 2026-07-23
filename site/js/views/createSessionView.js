@@ -1,4 +1,4 @@
-import { createEstimationTicket, createSession, getHomeState, getProjectsState, upsertProject } from "../api.js";
+import { createEstimationTicket, createSession, getHomeState, getProjectsState } from "../api.js";
 import { getCurrentUser } from "../authSession.js";
 import { isApiConfigured } from "../config.js";
 import { navigateTo } from "../router.js";
@@ -75,16 +75,6 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
     const projectError = el("p", { className: "field-error", id: "projectId-error" });
     form.append(el("div", { className: "field" }, [el("label", { htmlFor: "projectId", text: "Project *" }), projectSelect, projectError]));
 
-    const quickProjectName = el("input", { id: "quickProjectName", placeholder: "New project name" });
-    const quickProjectKey = el("input", { id: "quickProjectKey", placeholder: "New Jira project key (e.g. APP)" });
-    const quickProjectError = el("p", { className: "field-error", id: "quickProject-error" });
-    const quickProjectButton = el("button", { className: "button button--secondary", type: "button", text: "Create project" });
-    form.append(el("div", { className: "field field--wide" }, [
-      el("label", { htmlFor: "quickProjectName", text: "Quick create project" }),
-      el("div", { className: "button-row" }, [quickProjectName, quickProjectKey, quickProjectButton]),
-      quickProjectError,
-    ]));
-
     const name = addField(form, { id: "sessionName", label: "Session name", required: true, placeholder: "For example, Sprint 18 refinement" });
     const facilitatorName = el("p", { className: "readonly-value", text: currentUser?.displayName || currentUser?.email || "Signed-in facilitator" });
     form.append(el("div", { className: "field" }, [
@@ -146,41 +136,14 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
       }
     });
 
-    quickProjectButton.addEventListener("click", async () => {
-      quickProjectError.textContent = "";
-      const projectName = quickProjectName.value.trim();
-      const projectKey = quickProjectKey.value.trim().toUpperCase();
-      quickProjectKey.value = projectKey;
-      if (!projectName || !projectKey) {
-        quickProjectError.textContent = "Enter both a project name and Jira key.";
-        return;
-      }
-      setBusy(quickProjectButton, true, "Creating…");
-      try {
-        const result = await upsertProject({
-          teamId: teamSelect.value,
-          name: projectName,
-          jiraProjectKey: projectKey,
-          isArchived: false,
-        });
-        await loadProjectsForTeam(teamSelect.value, result?.project?.id || null);
-        quickProjectName.value = "";
-        quickProjectKey.value = "";
-        showToast("Project created", "success");
-      } catch (error) {
-        quickProjectError.textContent = errorMessage(error);
-        setBusy(quickProjectButton, false);
-      }
-    });
-
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      [teamError, projectError, quickProjectError, name.error, ticketInput.error].forEach((node) => { node.textContent = ""; });
+      [teamError, projectError, name.error, ticketInput.error].forEach((node) => { node.textContent = ""; });
       const parsed = parseJiraTicketInput(ticketInput.input.value);
       let valid = true;
       if (!teamSelect.value) { teamError.textContent = "Select a team."; valid = false; }
       if (teamSelect.value && !isUuid(teamSelect.value)) { teamError.textContent = "Select a valid team."; valid = false; }
-      if (!projectSelect.value) { projectError.textContent = "Select a project."; valid = false; }
+      if (!projectSelect.value) { projectError.textContent = "Select a project. Create one on the Projects page if needed."; valid = false; }
       if (!name.input.value.trim()) { name.error.textContent = "Enter a session name."; valid = false; }
       if (ticketInput.input.value.trim() && !parsed.ticketNumber) {
         ticketInput.error.textContent = "Paste a ticket number, key (APP-123), or Jira /browse URL.";

@@ -6,7 +6,6 @@ import {
   getSessionState,
   restartTicketVoting,
   revealTicket,
-  upsertProject,
 } from "../api.js";
 import { getCurrentUser } from "../authSession.js";
 import { isApiConfigured } from "../config.js";
@@ -106,231 +105,57 @@ function renderTicketList(model, currentTicket, completed, activateTicket) {
 }
 
 function normalizedProjects(model) {
-  return normalizeList(model.projects).map((project) => ({
-    ...project,
-    jiraProjectKey: String(project.jiraProjectKey || "").trim().toUpperCase(),
-  }));
-}
-
-function activeProjects(model) {
-  return normalizedProjects(model).filter((project) => project.isArchived !== true);
-}
-
-function getProjectSelectionMap() {
-  return getStoredValue(STORAGE_KEYS.facilitatorProjectByTeam, {}, "localStorage") || {};
-}
-
-function setProjectSelectionForTeam(teamId, projectId) {
-  const key = String(teamId || "").trim();
-  if (!key || !projectId) return;
-  const map = getProjectSelectionMap();
-  map[key] = String(projectId);
-  setStoredValue(STORAGE_KEYS.facilitatorProjectByTeam, map, "localStorage");
-}
-
-function getDefaultProjectId(model, availableProjects) {
-  if (availableProjects.length === 1) return String(availableProjects[0].id);
-  const map = getProjectSelectionMap();
-  const saved = map[String(model.session?.teamId || "")];
-  if (saved && availableProjects.some((project) => String(project.id) === String(saved))) {
-    return String(saved);
-  }
-  return availableProjects.length ? String(availableProjects[0].id) : "";
-}
-
-function projectManager(model, completed, refresh) {
-  const panel = el("section", { className: "panel" });
-  const projects = normalizedProjects(model);
-  const active = projects.filter((project) => project.isArchived !== true);
-  const teamId = model.session?.teamId;
-
-  panel.append(el("div", { className: "section-heading section-heading--compact" }, [
-    el("div", {}, [
-      el("h2", { text: "Projects" }),
-      el("p", { className: "muted", text: completed ? "A completed session is read-only." : "Create, edit, and archive projects for this team." }),
-    ]),
-  ]));
-
-  const list = el("div", { className: "ticket-list" });
-  if (!projects.length) {
-    list.append(el("div", { className: "empty-state empty-state--compact", text: "No projects yet." }));
-  } else {
-    projects.forEach((project) => {
-      const item = el("div", { className: "ticket-list-item" }, [
-        el("span", { className: "ticket-list-item__order", text: project.isArchived ? "A" : "P" }),
-        el("span", { className: "ticket-list-item__content" }, [
-          el("strong", { text: project.name }),
-          el("span", { text: `${project.jiraProjectKey}${project.isArchived ? " · archived" : ""}` }),
-        ]),
-      ]);
-
-      if (!completed) {
-        const controls = el("div", { className: "button-row" });
-        const edit = el("button", { className: "button button--secondary", type: "button", text: "Edit" });
-        const toggle = el("button", {
-          className: project.isArchived ? "button button--secondary" : "button button--danger",
-          type: "button",
-          text: project.isArchived ? "Unarchive" : "Archive",
-        });
-
-        edit.addEventListener("click", async () => {
-          const nextName = window.prompt("Project name", project.name || "");
-          if (nextName === null) return;
-          const nextKey = window.prompt("Jira project key", project.jiraProjectKey || "");
-          if (nextKey === null) return;
-          setBusy([edit, toggle], true, "Saving…");
-          try {
-            await upsertProject({
-              teamId,
-              projectId: project.id,
-              name: nextName,
-              jiraProjectKey: nextKey,
-              isArchived: project.isArchived === true,
-            });
-            showToast("Project updated", "success");
-            await refresh(true);
-          } catch (error) {
-            showToast(errorMessage(error), "error");
-            setBusy([edit, toggle], false);
-          }
-        });
-
-        toggle.addEventListener("click", async () => {
-          setBusy([edit, toggle], true, "Saving…");
-          try {
-            await upsertProject({
-              teamId,
-              projectId: project.id,
-              name: project.name,
-              jiraProjectKey: project.jiraProjectKey,
-              isArchived: project.isArchived !== true,
-            });
-            showToast(project.isArchived ? "Project unarchived" : "Project archived", "success");
-            await refresh(true);
-          } catch (error) {
-            showToast(errorMessage(error), "error");
-            setBusy([edit, toggle], false);
-          }
-        });
-
-        controls.append(edit, toggle);
-        item.append(controls);
-      }
-
-      list.append(item);
-    });
-  }
-  panel.append(list);
-
-  const createForm = el("form", { className: "compact-form", noValidate: true });
-  const name = el("input", { id: "new-project-name", placeholder: "Project name", disabled: completed });
-  const key = el("input", { id: "new-project-key", placeholder: "Project key (e.g. APP)", disabled: completed });
-  const nameError = el("p", { className: "field-error" });
-  const keyError = el("p", { className: "field-error" });
-  const submit = el("button", { className: "button button--primary", type: "submit", text: "Create project", disabled: completed });
-  createForm.append(
-    el("div", { className: "field" }, [el("label", { htmlFor: "new-project-name", text: "Name *" }), name, nameError]),
-    el("div", { className: "field" }, [el("label", { htmlFor: "new-project-key", text: "Jira key *" }), key, keyError]),
-    el("div", { className: "field--wide" }, [submit]),
-  );
-
-  createForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    nameError.textContent = "";
-    keyError.textContent = "";
-    const projectName = name.value.trim();
-    const projectKey = key.value.trim().toUpperCase();
-    key.value = projectKey;
-    let valid = true;
-    if (!projectName) {
-      nameError.textContent = "Enter a project name.";
-      valid = false;
-    }
-    if (!projectKey) {
-      keyError.textContent = "Enter a Jira project key.";
-      valid = false;
-    }
-    if (active.some((project) => String(project.name || "").trim().toLowerCase() === projectName.toLowerCase())) {
-      nameError.textContent = "This project name already exists.";
-      valid = false;
-    }
-    if (active.some((project) => String(project.jiraProjectKey || "").trim().toUpperCase() === projectKey)) {
-      keyError.textContent = "This Jira project key already exists.";
-      valid = false;
-    }
-    if (!valid) return;
-    setBusy(submit, true, "Creating…");
-    try {
-      const result = await upsertProject({
-        teamId,
-        name: projectName,
-        jiraProjectKey: projectKey,
-        isArchived: false,
-      });
-      if (result?.project?.id) {
-        setProjectSelectionForTeam(teamId, result.project.id);
-      }
-      showToast("Project created", "success");
-      await refresh(true);
-    } catch (error) {
-      showToast(errorMessage(error), "error");
-      setBusy(submit, false);
-    }
-  });
-
-  panel.append(createForm);
-  return panel;
+  return normalizeList(model.projects)
+    .filter((project) => project.isArchived !== true)
+    .map((project) => ({
+      ...project,
+      jiraProjectKey: String(project.jiraProjectKey || "").trim().toUpperCase(),
+    }));
 }
 
 function addTicketForm(model, completed, refresh) {
   const form = el("form", { className: "compact-form", noValidate: true });
-  const projects = activeProjects(model);
-  const projectSelect = el("select", {
-    id: "new-ticket-project",
-    disabled: completed || !projects.length,
-    required: true,
-  });
-  const defaultProjectId = getDefaultProjectId(model, projects);
-  if (!projects.length) {
-    projectSelect.append(el("option", { value: "", text: "No active project", selected: true }));
-  } else {
-    projects.forEach((project) => projectSelect.append(el("option", {
-      value: project.id,
-      text: `${project.name} (${project.jiraProjectKey})`,
-      selected: String(project.id) === String(defaultProjectId),
-    })));
-  }
+  const projects = normalizedProjects(model);
 
   const key = el("input", {
     id: "new-jira-key",
     placeholder: "Paste APP-123, 123, or Jira /browse URL",
     disabled: completed || !projects.length,
   });
-  const projectError = el("p", { className: "field-error" });
   const keyError = el("p", { className: "field-error" });
-  const submit = el("button", { className: "button button--primary", type: "submit", text: "Add ticket", disabled: completed });
-  projectSelect.addEventListener("change", () => {
-    if (projectSelect.value) {
-      setProjectSelectionForTeam(model.session?.teamId, projectSelect.value);
-    }
+  const submit = el("button", {
+    className: "button button--primary",
+    type: "submit",
+    text: "Add ticket",
+    disabled: completed || !projects.length,
   });
   form.append(
-    el("div", { className: "field" }, [el("label", { htmlFor: "new-ticket-project", text: "Project *" }), projectSelect, projectError]),
     el("div", { className: "field field--wide" }, [el("label", { htmlFor: "new-jira-key", text: "Ticket *" }), key, keyError]),
     el("div", { className: "field--wide" }, [submit]),
   );
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const parsed = parseJiraTicketInput(key.value);
-    projectError.textContent = "";
     keyError.textContent = "";
     let valid = true;
-    if (!projectSelect.value) { projectError.textContent = "Select a project first."; valid = false; }
+    if (!projects.length) { keyError.textContent = "No active projects. Create one on the Projects page first."; valid = false; }
     if (!parsed.ticketNumber) { keyError.textContent = "Paste a ticket number, key (APP-123), or Jira /browse URL."; valid = false; }
 
-    const selectedProject = projects.find((project) => String(project.id) === String(projectSelect.value));
-    if (parsed.projectKey && parsed.projectKey !== String(selectedProject?.jiraProjectKey || "")) {
-      keyError.textContent = `Pasted ticket belongs to ${parsed.projectKey}. Select that project first.`;
+    let selectedProject = null;
+    if (parsed.projectKey) {
+      selectedProject = projects.find((project) => project.jiraProjectKey === parsed.projectKey) || null;
+      if (!selectedProject) {
+        keyError.textContent = `No active project matches ${parsed.projectKey}.`;
+        valid = false;
+      }
+    }
+
+    if (!selectedProject && projects.length === 1) {
+      selectedProject = projects[0];
+    }
+
+    if (!selectedProject && !parsed.projectKey) {
+      keyError.textContent = "Paste a full ticket key or URL (for example APP-123) so the project can be selected automatically.";
       valid = false;
     }
 
@@ -342,11 +167,10 @@ function addTicketForm(model, completed, refresh) {
     if (!valid) return;
     setBusy(submit, true, "Adding…");
     try {
-      setProjectSelectionForTeam(model.session?.teamId, projectSelect.value);
       const sortOrder = model.tickets.reduce((maximum, ticket) => Math.max(maximum, Number(ticket.sortOrder) || 0), 0) + 1;
       const result = await createEstimationTicket({
         sessionId: model.session.id,
-        projectId: projectSelect.value,
+        projectId: selectedProject.id,
         ticketNumber: parsed.ticketNumber,
         status: "pending",
         sortOrder,
@@ -559,10 +383,10 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
   });
 
   const actionBar = el("div", { className: "facilitator-actions", role: "group", "aria-label": "Facilitator actions" }, [reveal, newRound, next, finish]);
-  const projectPanel = projectManager(model, completed, refresh);
   const ticketFormPanel = el("section", { className: "panel" }, [
-    el("div", { className: "section-heading section-heading--compact" }, [el("div", {}, [el("h2", { text: "Add ticket" }), el("p", { className: "muted", text: completed ? "A completed session is read-only." : "Add Jira tickets manually." })])]),
+    el("div", { className: "section-heading section-heading--compact" }, [el("div", {}, [el("h2", { text: "Add ticket" }), el("p", { className: "muted", text: completed ? "A completed session is read-only." : "Paste a full ticket key or URL and the project is inferred automatically." })])]),
     addTicketForm(model, completed, refresh),
+    completed ? null : el("p", { className: "muted", text: "Need to add or edit projects? Use the Projects page." }),
   ]);
 
   app.replaceChildren(
@@ -570,7 +394,6 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
     completed ? el("div", { className: "completion-banner" }, [el("strong", { text: "This session is complete." }), el("span", { text: " Results remain visible; changes are disabled." })]) : sharePanel,
     el("div", { className: "facilitator-layout" }, [ticketSidebar, focus]),
     actionBar,
-    projectPanel,
     ticketFormPanel,
   );
 }
