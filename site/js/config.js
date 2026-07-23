@@ -1,6 +1,6 @@
 export const CONFIG = {
-  supabaseUrl: "https://lwnhdeeupytcppdzyqlx.supabase.co",
-  supabaseAnonKey: "sb_publishable_cihDHvRQCIvDh2oYrv5jlA_RG992svg",
+  supabaseUrl: "PASTE_HERE_THE_SUPABASE_URL",
+  supabaseAnonKey: "PASTE_HERE_THE_SUPABASE_ANON_KEY",
   pollingIntervalMs: 3000,
   hiddenPollingIntervalMs: 15000,
   requestTimeoutMs: 15000,
