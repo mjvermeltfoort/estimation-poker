@@ -18,6 +18,7 @@
 - Keep PostgREST filters explicit and deterministic (`eq`, `neq`, `in`, `order`, `limit`) to avoid ambiguous client behavior.
 - Use RPC endpoints for privileged or multi-step server-side logic rather than recreating business rules in the client.
 - Any schema or policy change must be made in `supabase/migrations/` with additive migrations; never edit an old migration file in place.
+- If a migration file has already been pushed/applied, do not modify it; create a new follow-up migration file for any additional changes.
 
 ## Security
 

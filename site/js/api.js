@@ -246,7 +246,7 @@ export function createSession({ teamId, name }) {
   }).then(toClient);
 }
 
-export function createEstimationTicket({ sessionId, projectId, ticketNumber, summary, description = "", status = "pending", sortOrder = 1, createdAt = null }) {
+export function createEstimationTicket({ sessionId, projectId, ticketNumber, summary = null, description = null, status = "pending", sortOrder = 1, createdAt = null }) {
   return rpc("create_estimation_ticket", {
     p_session_id: sessionId,
     p_project_id: projectId,

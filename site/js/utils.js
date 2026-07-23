@@ -100,3 +100,32 @@ export function setBusy(buttons, busy, busyLabel = "Working…") {
 export function errorMessage(error) {
   return error?.message || "An unexpected error occurred.";
 }
+
+export function parseJiraTicketInput(input) {
+  const raw = String(input || "").trim();
+  if (!raw) {
+    return { projectKey: "", ticketNumber: "", jiraIssueKey: "" };
+  }
+
+  const issueMatch = raw.match(/([A-Za-z][A-Za-z0-9]+)-(\d+)/);
+  if (issueMatch) {
+    const projectKey = issueMatch[1].toUpperCase();
+    const ticketNumber = issueMatch[2];
+    return {
+      projectKey,
+      ticketNumber,
+      jiraIssueKey: `${projectKey}-${ticketNumber}`,
+    };
+  }
+
+  const numberOnly = raw.match(/^(\d+)$/);
+  if (numberOnly) {
+    return {
+      projectKey: "",
+      ticketNumber: numberOnly[1],
+      jiraIssueKey: "",
+    };
+  }
+
+  return { projectKey: "", ticketNumber: "", jiraIssueKey: "" };
+}
