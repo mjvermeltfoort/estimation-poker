@@ -302,10 +302,48 @@ export function finalizeTicket(ticketId, finalEstimateHours) {
   return rpc("finalize_ticket", { p_ticket_id: ticketId, p_final_estimate_hours: finalEstimateHours }).then(toClient);
 }
 
-export function getSupabaseGoogleAuthorizeUrl(redirectTo) {
+export function getSupabaseGoogleAuthorizeUrl(redirectTo, { codeChallenge = null } = {}) {
   const baseUrl = configuredUrl();
   const url = new URL("auth/v1/authorize", `${baseUrl.toString().replace(/\/$/, "")}/`);
   url.searchParams.set("provider", "google");
   url.searchParams.set("redirect_to", redirectTo);
+  if (codeChallenge) {
+    url.searchParams.set("code_challenge", codeChallenge);
+    url.searchParams.set("code_challenge_method", "S256");
+  }
   return url.toString();
+}
+
+export async function exchangeSupabaseAuthCode(authCode, codeVerifier) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), CONFIG.requestTimeoutMs);
+
+  try {
+    const baseUrl = configuredUrl();
+    const url = new URL("auth/v1/token", `${baseUrl.toString().replace(/\/$/, "")}/`);
+    url.searchParams.set("grant_type", "pkce");
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        ...headers({ authenticated: false }),
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        auth_code: authCode,
+        code_verifier: codeVerifier,
+      }),
+      signal: controller.signal,
+    });
+
+    return await parseJsonResponse(response);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (error?.name === "AbortError") {
+      throw new ApiError("The request timed out. Please try again.", "TIMEOUT");
+    }
+    throw new ApiError("Could not connect to Supabase. Check your network connection and configuration.", "NETWORK_ERROR", 0, error);
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
