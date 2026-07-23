@@ -1,4 +1,12 @@
-import { activateTicket as activateTicketRequest, create, finalizeTicket, getSessionState, revealTicket, update } from "../api.js";
+import {
+  activateTicket as activateTicketRequest,
+  completeSession,
+  createEstimationTicket,
+  finalizeTicket,
+  getSessionState,
+  restartTicketVoting,
+  revealTicket,
+} from "../api.js";
 import { getCurrentUser } from "../authSession.js";
 import { isApiConfigured } from "../config.js";
 import { showToast } from "../notifications.js";
@@ -127,7 +135,7 @@ function addTicketForm(model, completed, refresh) {
     setBusy(submit, true, "Adding…");
     try {
       const sortOrder = model.tickets.reduce((maximum, ticket) => Math.max(maximum, Number(ticket.sortOrder) || 0), 0) + 1;
-      const result = await create("estimationTickets", {
+      const result = await createEstimationTicket({
         sessionId: model.session.id,
         jiraIssueKey: normalizedKey,
         summary: summary.value.trim(),
@@ -135,7 +143,7 @@ function addTicketForm(model, completed, refresh) {
         status: "pending",
         sortOrder,
         createdAt: new Date().toISOString(),
-      }, { includeSessionState: true });
+      });
       showToast("Ticket added", "success");
       await refresh(true, result.sessionState);
     } catch (error) {
@@ -301,12 +309,7 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
     const nextRound = roundNumber + 1;
     try {
       setStoredValue(roundStorageKey(sessionId, currentTicket.id), nextRound, "sessionStorage");
-      const result = await update(
-        "estimationTickets",
-        currentTicket.id,
-        { status: "voting" },
-        { includeSessionState: true },
-      );
+      const result = await restartTicketVoting(currentTicket.id);
       showToast(`Round ${nextRound} started`, "success");
       await refresh(true, result.sessionState);
     } catch (error) {
@@ -330,12 +333,7 @@ function renderFacilitator(app, model, facilitator, roundNumber, context) {
     if (!window.confirm(warning)) return;
     setBusy(finish, true, "Completing…");
     try {
-      const result = await update(
-        "estimationSessions",
-        sessionId,
-        { status: "completed", completedAt: new Date().toISOString(), currentTicketId: "" },
-        { includeSessionState: true },
-      );
+      const result = await completeSession(sessionId);
       showToast("Session completed", "success");
       await refresh(true, result.sessionState);
     } catch (error) {

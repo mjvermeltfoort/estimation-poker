@@ -42,7 +42,7 @@ globalThis.fetch = async (url, options) => {
 
 const { clearAuthSession, getAuthToken, setAuthSession } = await import("../site/js/authSession.js");
 const { CONFIG } = await import("../site/js/config.js");
-const { list } = await import("../site/js/api.js");
+const { createSession, createEstimationTicket } = await import("../site/js/api.js");
 
 CONFIG.supabaseUrl = "https://supabase.example.test";
 CONFIG.supabaseAnonKey = "anon-key-for-tests";
@@ -54,13 +54,35 @@ setAuthSession({
 });
 assert(getAuthToken() === "signed-session-token", "The signed session was not stored for this browser tab.");
 
-await list("teams");
-assert(capturedRequest.options.method === "GET", "Protected API reads must use GET for PostgREST.");
-assert(!capturedRequest.options.headers["Content-Type"], "GET requests should not send a JSON content-type header.");
+await createSession({ teamId: "team-123", name: "Sprint planning" });
+assert(capturedRequest.options.method === "POST", "RPC requests must use POST.");
+assert(capturedRequest.url.includes("rest/v1/rpc/create_session"), "Session creation must go through the create_session RPC.");
 assert(capturedRequest.options.headers.Accept === "application/json", "Supabase requests should ask for JSON responses.");
+assert(capturedRequest.options.headers["Content-Type"] === "application/json", "RPC requests should send a JSON content-type header.");
 assert(capturedRequest.options.headers.Authorization === "Bearer signed-session-token", "The API client did not attach the signed session as a bearer token.");
 assert(capturedRequest.options.headers.apikey === "anon-key-for-tests", "The Supabase anon key is missing from the request.");
 assert(!capturedRequest.url.includes("signed-session-token"), "The signed session leaked into the request URL.");
+assert(capturedRequest.options.body === JSON.stringify({ p_team_id: "team-123", p_name: "Sprint planning" }), "Session creation must send the expected RPC payload.");
+
+await createEstimationTicket({
+  sessionId: "session-456",
+  jiraIssueKey: "ABC-123",
+  summary: "Implement RPC flow",
+  description: "Replace direct table writes.",
+  status: "pending",
+  sortOrder: 2,
+  createdAt: "2026-07-23T12:00:00.000Z",
+});
+assert(capturedRequest.url.includes("rest/v1/rpc/create_estimation_ticket"), "Ticket creation must go through the create_estimation_ticket RPC.");
+assert(capturedRequest.options.body === JSON.stringify({
+  p_session_id: "session-456",
+  p_jira_issue_key: "ABC-123",
+  p_summary: "Implement RPC flow",
+  p_description: "Replace direct table writes.",
+  p_status: "pending",
+  p_sort_order: 2,
+  p_created_at: "2026-07-23T12:00:00.000Z",
+}), "Ticket creation must send the expected RPC payload.");
 
 clearAuthSession();
 assert(getAuthToken() === null, "Signing out did not remove the browser session.");

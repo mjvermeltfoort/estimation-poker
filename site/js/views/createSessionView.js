@@ -1,4 +1,4 @@
-import { create, list } from "../api.js";
+import { createEstimationTicket, createSession, getHomeState } from "../api.js";
 import { getCurrentUser } from "../authSession.js";
 import { isApiConfigured } from "../config.js";
 import { navigateTo } from "../router.js";
@@ -44,7 +44,8 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
     const currentUser = getCurrentUser();
     const facilitatorMemberships = (currentUser?.memberships || []).filter((membership) => ["facilitator", "admin"].includes(membership.role));
     const facilitatorTeamIds = new Set(facilitatorMemberships.map((membership) => String(membership.teamId)));
-    const teams = normalizeList(await list("teams"))
+    const homeState = await getHomeState();
+    const teams = normalizeList(homeState?.teams)
       .filter(isActive)
       .filter((team) => facilitatorTeamIds.has(String(team.id)));
     if (!isCurrent()) return;
@@ -107,7 +108,7 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
 
       setBusy(submit, true, "Creating…");
       try {
-        const sessionData = await create("estimationSessions", {
+        const sessionData = await createSession({
           teamId: teamSelect.value,
           name: name.input.value.trim(),
         });
@@ -117,7 +118,7 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
         setStoredValue(STORAGE_KEYS.lastSessionId, session.id);
         if (normalizedKey) {
           try {
-            await create("estimationTickets", {
+            await createEstimationTicket({
               sessionId: session.id,
               jiraIssueKey: normalizedKey,
               summary: summary.input.value.trim(),

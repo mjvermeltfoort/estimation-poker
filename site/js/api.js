@@ -11,14 +11,6 @@ export class ApiError extends Error {
   }
 }
 
-const ENTITY_TABLES = {
-  teams: "teams",
-  teamMembers: "team_members",
-  estimationSessions: "estimation_sessions",
-  estimationTickets: "estimation_tickets",
-  votes: "votes",
-};
-
 function toSnakeKey(key) {
   return String(key).replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 }
@@ -150,30 +142,8 @@ async function request(path, {
   }
 }
 
-function resolveTable(entity) {
-  const table = ENTITY_TABLES[entity];
-  if (!table) throw new ApiError(`Unknown entity: ${entity}`, "UNKNOWN_ENTITY", 400);
-  return table;
-}
-
-function toPostgrestFilter(query, filters = {}) {
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === "") return;
-    query[toSnakeKey(key)] = `eq.${value}`;
-  });
-  return query;
-}
-
 function normalizeList(value) {
   return Array.isArray(value) ? value : [];
-}
-
-function unwrapSingle(payload, entity) {
-  if (!Array.isArray(payload)) {
-    throw new ApiError(`Unexpected ${entity} response shape.`, "INVALID_RESPONSE", 500, payload);
-  }
-  if (!payload.length) throw new ApiError("The requested record was not found.", "NOT_FOUND", 404);
-  return payload[0];
 }
 
 function getUserIdentity(user) {
@@ -237,75 +207,35 @@ export function adminUpdateTeamMember({ teamMemberId, role = null, active = null
   }).then(toClient);
 }
 
-export async function list(entity, filters = {}) {
-  if (entity === "votes") {
-    throw new ApiError("Votes cannot be listed directly.", "PROTECTED_ENTITY", 403);
-  }
-  const table = resolveTable(entity);
-  const query = toPostgrestFilter({}, filters);
-  query.select = "*";
-  const payload = await request(`rest/v1/${table}`, {
-    method: "GET",
-    authenticated: true,
-    query,
-    contentType: null,
-  });
-  return normalizeList(toClient(payload));
-}
-
-export async function get(entity, id) {
-  if (entity === "votes") {
-    throw new ApiError("Votes cannot be fetched directly.", "PROTECTED_ENTITY", 403);
-  }
-  const table = resolveTable(entity);
-  const payload = await request(`rest/v1/${table}`, {
-    method: "GET",
-    authenticated: true,
-    query: { select: "*", id: `eq.${id}`, limit: 1 },
-    contentType: null,
-  });
-  return toClient(unwrapSingle(payload, entity));
-}
-
-export async function create(entity, data) {
-  const table = resolveTable(entity);
-  const payload = await request(`rest/v1/${table}`, {
-    method: "POST",
-    authenticated: true,
-    body: toDatabase(data),
-    query: { select: "*" },
-  });
-  return toClient(Array.isArray(payload) ? payload[0] : payload);
-}
-
-export async function update(entity, id, data) {
-  const table = resolveTable(entity);
-  const payload = await request(`rest/v1/${table}`, {
-    method: "PATCH",
-    authenticated: true,
-    body: toDatabase(data),
-    query: { id: `eq.${id}`, select: "*" },
-  });
-  return toClient(Array.isArray(payload) ? payload[0] : payload);
-}
-
-export async function remove(entity, id) {
-  const table = resolveTable(entity);
-  const payload = await request(`rest/v1/${table}`, {
-    method: "DELETE",
-    authenticated: true,
-    query: { id: `eq.${id}`, select: "*" },
-    contentType: null,
-  });
-  return toClient(Array.isArray(payload) ? payload[0] : payload);
-}
-
 export function getSessionState(sessionId) {
   return rpc("session_state", { p_session_id: sessionId }).then(toClient);
 }
 
+export function createSession({ teamId, name }) {
+  return rpc("create_session", {
+    p_team_id: teamId,
+    p_name: name,
+  }).then(toClient);
+}
+
+export function createEstimationTicket({ sessionId, jiraIssueKey, summary, description = "", status = "pending", sortOrder = 1, createdAt = null }) {
+  return rpc("create_estimation_ticket", {
+    p_session_id: sessionId,
+    p_jira_issue_key: jiraIssueKey,
+    p_summary: summary,
+    p_description: description,
+    p_status: status,
+    p_sort_order: sortOrder,
+    p_created_at: createdAt,
+  }).then(toClient);
+}
+
 export function activateTicket(sessionId, ticketId) {
   return rpc("activate_ticket", { p_session_id: sessionId, p_ticket_id: ticketId }).then(toClient);
+}
+
+export function restartTicketVoting(ticketId) {
+  return rpc("restart_ticket_voting", { p_ticket_id: ticketId }).then(toClient);
 }
 
 export function submitVote(payload) {
@@ -323,6 +253,10 @@ export function revealTicket(ticketId, roundNumber) {
 
 export function finalizeTicket(ticketId, finalEstimateHours) {
   return rpc("finalize_ticket", { p_ticket_id: ticketId, p_final_estimate_hours: finalEstimateHours }).then(toClient);
+}
+
+export function completeSession(sessionId) {
+  return rpc("complete_session", { p_session_id: sessionId }).then(toClient);
 }
 
 export function getSupabaseGoogleAuthorizeUrl(redirectTo, { codeChallenge = null } = {}) {
