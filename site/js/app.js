@@ -19,7 +19,7 @@ let routeGeneration = 0;
 let activeRoute = null;
 
 function updateNavigation(route) {
-  const canCreate = Boolean(getCurrentUser()?.memberships?.some((membership) => membership.role === "facilitator"));
+  const canCreate = Boolean(getCurrentUser()?.memberships?.some((membership) => ["facilitator", "admin"].includes(membership.role)));
   const canAdmin = Boolean(getCurrentUser()?.memberships?.some((membership) => membership.role === "admin"));
   document.querySelectorAll("[data-nav]").forEach((link) => {
     if (link.dataset.nav === "create") link.hidden = !canCreate;

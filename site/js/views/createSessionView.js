@@ -42,7 +42,7 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
 
   try {
     const currentUser = getCurrentUser();
-    const facilitatorMemberships = (currentUser?.memberships || []).filter((membership) => membership.role === "facilitator");
+    const facilitatorMemberships = (currentUser?.memberships || []).filter((membership) => ["facilitator", "admin"].includes(membership.role));
     const facilitatorTeamIds = new Set(facilitatorMemberships.map((membership) => String(membership.teamId)));
     const teams = normalizeList(await list("teams"))
       .filter(isActive)
@@ -51,7 +51,7 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
     if (!teams.length) {
       app.replaceChildren(el("section", { className: "empty-state" }, [
         el("h1", { text: "Facilitator access required" }),
-        el("p", { text: "Your signed-in account is not registered as a facilitator for an active team." }),
+        el("p", { text: "Your signed-in account is not registered as a facilitator or admin for an active team." }),
         el("a", { className: "button button--secondary", href: "#/", text: "Back" }),
       ]));
       return;

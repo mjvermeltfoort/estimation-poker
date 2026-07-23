@@ -17,6 +17,8 @@ function sortSessions(sessions) {
 }
 
 function renderSessionCard(session) {
+  const userMemberships = getCurrentUser()?.memberships || [];
+  const canAdminTeam = userMemberships.some((membership) => membership.role === "admin" && String(membership.teamId) === String(session.teamId));
   const metadata = el("div", { className: "session-card__meta" }, [
     statusBadge(session.status),
     el("span", { text: `Created ${formatDate(session.createdAt)}` }),
@@ -25,7 +27,7 @@ function renderSessionCard(session) {
     metadata.append(el("span", { text: `${session.ticketCount} ticket${Number(session.ticketCount) === 1 ? "" : "s"}` }));
   }
   const actions = [el("a", { className: "button button--primary", href: `#/session/${encodeURIComponent(session.id)}`, text: "Join" })];
-  if (session.canFacilitate) {
+  if (session.canFacilitate || canAdminTeam) {
     actions.push(el("a", { className: "button button--secondary", href: `#/facilitate/${encodeURIComponent(session.id)}`, text: "Facilitate" }));
   }
   return el("article", { className: "session-card" }, [
@@ -38,7 +40,7 @@ function renderSessionCard(session) {
 }
 
 function renderHome(app) {
-  const canCreate = Boolean(getCurrentUser()?.memberships?.some((membership) => membership.role === "facilitator"));
+  const canCreate = Boolean(getCurrentUser()?.memberships?.some((membership) => ["facilitator", "admin"].includes(membership.role)));
   const selectedTeam = state.teams.find((team) => String(team.id) === String(state.selectedTeamId));
   const header = el("div", { className: "hero" }, [
     el("div", {}, [

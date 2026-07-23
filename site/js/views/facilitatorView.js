@@ -1,4 +1,5 @@
 import { activateTicket as activateTicketRequest, create, finalizeTicket, getSessionState, revealTicket, update } from "../api.js";
+import { getCurrentUser } from "../authSession.js";
 import { isApiConfigured } from "../config.js";
 import { showToast } from "../notifications.js";
 import { getStoredValue, roundStorageKey, setStoredValue, STORAGE_KEYS } from "../storage.js";
@@ -376,7 +377,10 @@ export async function renderFacilitatorView({
     const model = normalizeSessionState(prefetchedSessionState || await getSessionState(sessionId));
     if (!isCurrent()) return;
     if (!model) throw new Error("The session was not found or the response is incomplete.");
-    if (!model.viewer?.canFacilitate) {
+    const hasAdminMembershipForTeam = (getCurrentUser()?.memberships || []).some((membership) => (
+      membership.role === "admin" && String(membership.teamId) === String(model.session?.teamId)
+    ));
+    if (!model.viewer?.canFacilitate && !hasAdminMembershipForTeam) {
       throw new Error("Your signed-in account does not have facilitator permission for this team.");
     }
     const facilitator = { id: model.viewer.memberId, displayName: model.viewer.displayName };
