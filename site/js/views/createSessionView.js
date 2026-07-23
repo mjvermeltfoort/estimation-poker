@@ -106,9 +106,7 @@ export async function renderCreateSessionView({ app, isCurrent = () => true }) {
           teamId: teamSelect.value,
           name: name.input.value.trim(),
           status: "draft",
-          createdByMemberId: facilitatorMemberships.find((membership) => String(membership.teamId) === String(teamSelect.value))?.memberId,
-          createdAt: new Date().toISOString(),
-          currentTicketId: "",
+          currentTicketId: null,
         });
         const session = sessionData?.session || sessionData;
         if (!session?.id) throw new Error("The server did not return a session ID.");
