@@ -30,6 +30,8 @@ assert(participantRoute.query.get("member") === null, "Participant identity must
 
 const createRoute = parseHashRoute("#/sessions/new");
 assert(createRoute.name === "create-session", "New-session route is not recognized.");
+const adminRoute = parseHashRoute("#/admin");
+assert(adminRoute.name === "admin", "Admin route is not recognized.");
 assert(parseHashRoute("#/unknown").name === "not-found", "Unknown route does not return a 404.");
 
 const statistics = calculateStatistics([

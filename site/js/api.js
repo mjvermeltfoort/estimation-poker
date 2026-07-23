@@ -214,6 +214,29 @@ export function getHomeState(teamId = null) {
   return rpc("home_state", { p_team_id: teamId || null }).then(toClient);
 }
 
+export function getAdminState(teamId = null) {
+  return rpc("admin_state", { p_team_id: teamId || null }).then(toClient);
+}
+
+export function adminUpsertTeamMember({ teamId, email, displayName, role, active = true }) {
+  return rpc("admin_upsert_team_member", {
+    p_team_id: teamId,
+    p_email: email,
+    p_display_name: displayName || null,
+    p_role: role,
+    p_active: Boolean(active),
+  }).then(toClient);
+}
+
+export function adminUpdateTeamMember({ teamMemberId, role = null, active = null, displayName = null }) {
+  return rpc("admin_update_team_member", {
+    p_team_member_id: teamMemberId,
+    p_role: role,
+    p_active: active,
+    p_display_name: displayName,
+  }).then(toClient);
+}
+
 export async function list(entity, filters = {}) {
   if (entity === "votes") {
     throw new ApiError("Votes cannot be listed directly.", "PROTECTED_ENTITY", 403);

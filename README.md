@@ -4,7 +4,7 @@ Estimation Poker is a small internal web app that helps teams estimate tickets i
 
 The first version supports teams, sessions, manually entered Jira tickets, blind voting rounds, basic statistics, multiple rounds, and session completion. It requires no build step or frontend framework.
 
-Supabase migration is in progress. The frontend now targets Supabase Auth + PostgREST/RPC and no longer depends on the Apps Script `/exec` endpoint.
+The frontend targets Supabase Auth + PostgREST/RPC.
 
 ## Architecture
 
@@ -44,7 +44,6 @@ The frontend uses HTML5, modern CSS, and vanilla JavaScript ES modules. All brow
 │       └── views/                # route views
 ├── AGENTS.md
 ├── LICENSE
-├── resources/Code.gs            # legacy Apps Script backend (kept during migration)
 ├── supabase/migrations/         # Supabase SQL migrations
 ├── tests/smoke.mjs              # framework-free router and statistics tests
 └── README.md
@@ -93,6 +92,7 @@ If migrations are not detected, verify both [supabase/config.toml](supabase/conf
 | --- | --- |
 | `#/` | View teams and sessions |
 | `#/sessions/new` | Create a new draft session |
+| `#/admin` | Manage team users and roles (admin only) |
 | `#/session/{sessionId}` | Join and vote |
 | `#/facilitate/{sessionId}` | Facilitate a session |
 
@@ -150,7 +150,6 @@ When GJS is available, run the framework-free smoke tests with:
 ```bash
 gjs -m tests/smoke.mjs
 gjs -m tests/auth-smoke.mjs
-gjs -m tests/codegs-smoke.mjs
 ```
 
 ## License

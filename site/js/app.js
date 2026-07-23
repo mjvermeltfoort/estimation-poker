@@ -10,6 +10,7 @@ import { renderFacilitatorView } from "./views/facilitatorView.js";
 import { renderHomeView } from "./views/homeView.js";
 import { renderNotFoundView } from "./views/notFoundView.js";
 import { renderSessionView } from "./views/sessionView.js";
+import { renderAdminView } from "./views/adminView.js";
 
 const app = document.querySelector("#app");
 const configBanner = document.querySelector("#config-banner");
@@ -19,9 +20,18 @@ let activeRoute = null;
 
 function updateNavigation(route) {
   const canCreate = Boolean(getCurrentUser()?.memberships?.some((membership) => membership.role === "facilitator"));
+  const canAdmin = Boolean(getCurrentUser()?.memberships?.some((membership) => membership.role === "admin"));
   document.querySelectorAll("[data-nav]").forEach((link) => {
     if (link.dataset.nav === "create") link.hidden = !canCreate;
-    const active = link.dataset.nav === (route.name === "home" ? "home" : route.name === "create-session" ? "create" : "session");
+    if (link.dataset.nav === "admin") link.hidden = !canAdmin;
+    const activeNav = route.name === "home"
+      ? "home"
+      : route.name === "create-session"
+        ? "create"
+        : route.name === "admin"
+          ? "admin"
+          : "session";
+    const active = link.dataset.nav === activeNav;
     if (active) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   });
@@ -65,6 +75,7 @@ async function routeToView(route, generation, {
     switch (route.name) {
       case "home": await renderHomeView(context); break;
       case "create-session": await renderCreateSessionView(context); break;
+      case "admin": await renderAdminView(context); break;
       case "session": await renderSessionView(context); break;
       case "facilitate": await renderFacilitatorView(context); break;
       default: renderNotFoundView(context);
